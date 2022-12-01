@@ -44,12 +44,12 @@ class Gridder:
 def main(args):
     M1_outer = 4.18
     M3_outer = 2.508
-    if args.annular:
-        M1_inner = 2.558
-        M3_inner = 0.55
-    else:
+    if args.circular:
         M1_inner = 0.0
         M3_inner = 0.0
+    else:
+        M1_inner = 2.558
+        M3_inner = 0.55
 
     with open(args.input, 'rb') as f:
         x, y, w1, w3, Udn3norm, Vdn3norm = pickle.load(f)
@@ -132,23 +132,26 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "output",
-        default="M1M3_decompose.pkl",
+        default="M1M3_decomposition.pkl",
         help=
             "output file name  "
-            "Default: M1M3_decompose.pkl",
+            "Default: M1M3_decomposition.pkl",
         nargs='?'
     )
     parser.add_argument(
         "--zk_simultaneous",
         action="store_true",
         help=
-            "Use simultaneous Zernike decomposition of M1M3 sag.  "
+            "Use simultaneous (instead of independent) Zernike "
+            "decomposition of M1 and M3 sag.  "
             "Default: False"
     )
     parser.add_argument(
-        "--annular",
+        "--circular",
         action="store_true",
-        help="Use annular Zernike decomposition.  Default: False"
+        help=
+            "Use circular (instead of annular) Zernike decomposition.  "
+            "Default: False"
     )
     parser.add_argument(
         "--jmax",
