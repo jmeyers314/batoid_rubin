@@ -72,8 +72,8 @@ def main(args):
             )
         )
     )
-    C = np.empty((156, 156))
-    for i in range(156):
+    C = np.empty((nmode, nmode))
+    for i in range(nmode):
         d = np.genfromtxt(files[i], delimiter=',')
         C[:, i] = d[:, 1]
     s = np.linalg.svd(C)[1]
