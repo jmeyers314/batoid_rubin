@@ -9,7 +9,10 @@ from scipy.io import loadmat
 
 
 def main(args):
-    indir = "/Users/josh/src/ZEMAX_FEMAP/0M1M3Bending/"
+    indir = os.path.join(
+        args.indir,
+        "0M1M3Bending"
+    )
     # Load NASTRAN perturbations
     data = loadmat(
         os.path.join(
@@ -94,6 +97,14 @@ def main(args):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
+    parser.add_argument(
+        "--indir",
+        type=str,
+        default="/Users/josh/src/ZEMAX_FEMAP/",
+        help=
+            "Location of ZEMAX_FEMAP directory.  "
+            "Default: /Users/josh/src/ZEMAX_FEMAP/"
+    )
     parser.add_argument(
         "--M1ptt",
         type=int,
