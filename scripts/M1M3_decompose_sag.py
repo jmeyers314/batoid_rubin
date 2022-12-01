@@ -55,9 +55,9 @@ def main(args):
         x, y, w1, w3, Udn3norm, Vdn3norm = pickle.load(f)
     nnode, nmode = Udn3norm.shape
 
-    M1zk = np.zeros((nnode, args.jmax+1))
-    M3zk = np.zeros((nnode, args.jmax+1))
-    M1M3zk = np.zeros((nnode, args.jmax+1))
+    M1zk = np.zeros((nmode, args.jmax+1))
+    M3zk = np.zeros((nmode, args.jmax+1))
+    M1M3zk = np.zeros((nmode, args.jmax+1))
 
     if args.zk_simultaneous:
         basis = zernikeBasis(
