@@ -14,6 +14,30 @@ def main(args):
          M3_x_grid, M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
         ) = pickle.load(f)
 
+    if tstart:=eval(args.swap):
+        # swap first half for second half
+        tend = np.roll(tstart, len(tstart)//2)
+        for arr in (
+            M1zk, M3zk, M1M3zk,
+            M1_x_grid, M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
+            M3_x_grid, M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
+        ):
+            arr[tstart] = arr[tend]
+
+    M1zk = M1zk[:args.nkeep]
+    M3zk = M3zk[:args.nkeep]
+    M1M3zk = M1M3zk[:args.nkeep]
+
+    M1_z_grid = M1_z_grid[:args.nkeep]
+    M1_dzdx_grid = M1_dzdx_grid[:args.nkeep]
+    M1_dzdy_grid = M1_dzdy_grid[:args.nkeep]
+    M1_d2zdxy_grid = M1_d2zdxy_grid[:args.nkeep]
+
+    M3_z_grid = M3_z_grid[:args.nkeep]
+    M3_dzdx_grid = M3_dzdx_grid[:args.nkeep]
+    M3_dzdy_grid = M3_dzdy_grid[:args.nkeep]
+    M3_d2zdxy_grid = M3_d2zdxy_grid[:args.nkeep]
+
     fits.writeto(
         os.path.join(
             args.outdir,
@@ -89,6 +113,20 @@ if __name__ == "__main__":
         "--outdir",
         type=str,
         default="batoid_bend/",
+    )
+    parser.add_argument(
+        "--swap",
+        type=str,
+        default="[19,26]",
+        help=
+            "Swap first half of given modes with second half.  "
+            "Default: [19,26]"
+    )
+    parser.add_argument(
+        "--nkeep",
+        type=int,
+        default=20,
+        help="Number of modes to keep.  Default: 20"
     )
     args = parser.parse_args()
     main(args)
