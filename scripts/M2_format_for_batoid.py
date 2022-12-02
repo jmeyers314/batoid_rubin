@@ -18,7 +18,7 @@ def main(args):
         tend = np.roll(tstart, len(tstart)//2)
         for arr in (
             M2zk,
-            M2_x_grid, M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid
+            M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid
         ):
             arr[tstart] = arr[tend]
 
@@ -74,10 +74,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--swap",
         type=str,
-        default="[17,18,19,25,26,27]",
+        # default="[17,18,19,25,26,27]",
+        default="[]",
         help=
             "Swap first half of given modes with second half.  "
-            "Default: [17,18,19,25,26,27]"
+            "Default: []"
+            # "Default: [17,18,19,25,26,27]"
     )
     parser.add_argument(
         "--nkeep",

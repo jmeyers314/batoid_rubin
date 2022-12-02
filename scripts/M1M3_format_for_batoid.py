@@ -19,8 +19,8 @@ def main(args):
         tend = np.roll(tstart, len(tstart)//2)
         for arr in (
             M1zk, M3zk, M1M3zk,
-            M1_x_grid, M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
-            M3_x_grid, M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
+            M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
+            M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
         ):
             arr[tstart] = arr[tend]
 
@@ -70,7 +70,7 @@ def main(args):
         np.stack([M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid]),
         overwrite=True
     )
-    if np.all(M1zk):
+    if np.all(M1zk==0.0):
         fits.writeto(
             os.path.join(
                 args.outdir,
@@ -117,10 +117,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--swap",
         type=str,
-        default="[19,26]",
+        # default="[19,26]",
+        default="[]",
         help=
             "Swap first half of given modes with second half.  "
-            "Default: [19,26]"
+            "Default: []"
+            # "Default: [19,26]"
     )
     parser.add_argument(
         "--nkeep",
