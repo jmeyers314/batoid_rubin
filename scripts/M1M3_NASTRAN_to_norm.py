@@ -82,14 +82,17 @@ def main(args):
     # Solve for FEA modes
     u, s, vh = np.linalg.svd(Cinv.T@normal_modes, full_matrices=False)
 
-    # Normalize in the same way as on project.
+    # Normalize to 1um RMS surface deviation.
     Udn3norm = np.empty((nnode, nmode))
     Vdn3norm = np.empty((nmode, nmode))
     for imode in range(nmode):
         factor = 1e-6/np.std(vh[imode])
         Udn3norm[:, imode] = vh[imode] * factor
         Vdn3norm[:, imode] = u[:, imode] * factor / s[imode]
+
     # Note: there are arbitrary minus signs here we don't track.
+    # We might also have some position swaps when switching PTT off and on.
+    # These all appear to be in the batoid coordinate system here.
     with open(args.output, 'wb') as f:
         pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm), f)
 

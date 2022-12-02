@@ -23,14 +23,15 @@ def main(args):
     )['NXYZap']
 
     nodeID = data[:, 0]
-    x, y, z = data[:, 2:5].T  # Original node positions on M1M3 mirror
-    x, y = -y, -x  # x/y flipped and negated
+    x, y, z = data[:, 2:5].T  # Harris node positions on M2 mirror
+    x, y, z = -y, -x, -z  # This is M2 FEA CS -> M2 CS see https://sitcomtn-003.lsst.io/#m2
 
     # NASTRAN perturbations for each mode
+    # Note M2 FEA CS -> M2 CS here too.
     fea_modes = np.array([
-        -data[:, 6::3],  # x/y flipped and negated
-        -data[:, 5::3],
-        -data[:, 7::3]  # z negated
+        -data[:, 6::3],  # x <= -y
+        -data[:, 5::3],  # y <= -x
+        -data[:, 7::3]   # z <= -z
     ]).T
     fea_modes *= 0.0254  # inches -> meters
     x *= 0.0254
