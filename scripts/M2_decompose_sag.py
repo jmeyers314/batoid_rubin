@@ -2,6 +2,7 @@ import pickle
 
 from galsim.zernike import zernikeBasis, Zernike
 import numpy as np
+from scipy.io import loadmat
 from scipy.interpolate import CloughTocher2DInterpolator
 from tqdm import tqdm
 
@@ -21,7 +22,7 @@ class Gridder:
             np.hstack([y, (self.rmin-0.1)*np.sin(th), (self.rmax+0.1)*np.sin(th)]),
         ]).T
 
-        self.x_grid = np.arange(-2, ngrid-2) * R_outer/(ngrid-5) - R_outer/2
+        self.x_grid = np.arange(-2, ngrid-2) * 2*R_outer/(ngrid-5) - R_outer
         self.dx = (self.x_grid[-1] - self.x_grid[0])/(ngrid-1)
         self.xx, self.yy = np.meshgrid(self.x_grid, self.x_grid)
         self.rr = np.hypot(self.xx, self.yy)
@@ -32,11 +33,24 @@ class Gridder:
         )
         z_grid = ip(self.xx, self.yy)
         dd = self.dx / 10
-        dzdx_grid = (ip(self.xx+dd, self.yy) - ip(self.xx-dd, self.yy))/(2*dd)
-        dzdy_grid = (ip(self.xx, self.yy+dd) - ip(self.xx, self.yy-dd))/(2*dd)
-        d2zdxy_grid = (  (ip(self.xx+dd, self.yy+dd) - ip(self.xx-dd, self.yy+dd))
-                       - (ip(self.xx+dd, self.yy-dd) - ip(self.xx-dd, self.yy-dd))
-                      )/(4*dd*dd)
+        dzdx_grid = (
+            ip(self.xx+dd, self.yy) -
+            ip(self.xx-dd, self.yy)
+        )/(2*dd)
+        dzdy_grid = (
+            ip(self.xx, self.yy+dd) -
+            ip(self.xx, self.yy-dd)
+        )/(2*dd)
+        d2zdxy_grid = (
+            (ip(self.xx+dd, self.yy+dd) -
+             ip(self.xx-dd, self.yy+dd)) -
+            (ip(self.xx+dd, self.yy-dd) -
+             ip(self.xx-dd, self.yy-dd))
+        )/(4*dd*dd)
+
+        for arr in z_grid, dzdx_grid, dzdy_grid, d2zdxy_grid:
+            arr[self.rr > (self.rmax+0.05)] = 0
+            arr[self.rr < (self.rmin-0.05)] = 0
 
         return z_grid, dzdx_grid, dzdy_grid, d2zdxy_grid
 
@@ -48,8 +62,15 @@ def main(args):
     else:
         M2_inner = 0.9
 
-    with open(args.input, 'rb') as f:
-        x, y, Udn3norm, Vdn3norm = pickle.load(f)
+    if args.input.endswith('.pkl'):
+        with open(args.input, 'rb') as f:
+            x, y, Udn3norm, Vdn3norm = pickle.load(f)
+    elif args.input.endswith('.mat'):
+        data = loadmat(args.input)
+        x = data['x'][:, 0]
+        y = data['y'][:, 0]
+        Udn3norm = data['Udn3norm']
+        Vdn3norm = data['Vdn3norm']
     nnode, nmode = Udn3norm.shape
 
     M2zk = np.zeros((nmode, args.jmax+1))
@@ -92,7 +113,7 @@ if __name__ == "__main__":
         "--input",
         type=str,
         default="M2_sag.pkl",
-        help="Input pickle file.  Default: M2_sag.pkl"
+        help="Input pickle or mat file.  Default: M2_sag.pkl"
     )
     parser.add_argument(
         "output",
