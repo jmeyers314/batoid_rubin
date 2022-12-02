@@ -40,7 +40,7 @@ def _node_to_grid(nodex, nodey, nodez, grid_coords):
     x, y = grid_coords
     nx = len(x)
     ny = len(y)
-    out = np.zeros([4, ny, nx])
+    out = np.zeros((4, ny, nx))
     # Approximate derivatives with finite differences.  Make the finite
     # difference spacing equal to 1/10th the grid spacing.
     dx = np.mean(np.diff(x))*1e-1
@@ -102,22 +102,26 @@ def m1m3_fea_nodes(fea_dir):
 
 @lru_cache(maxsize=4)
 def m1m3_grid_xy(bend_dir):
-    m1_grid_xy = fits.getdata(os.path.join(bend_dir, "M1_bend_coords.fits.gz"))
-    m3_grid_xy = fits.getdata(os.path.join(bend_dir, "M3_bend_coords.fits.gz"))
+    with open(os.path.join(bend_dir, "bend.yaml")) as f:
+        config = yaml.safe_load(f)
+    m1_grid_xy = fits.getdata(os.path.join(bend_dir, config['M1']['grid']['coords']))
+    m3_grid_xy = fits.getdata(os.path.join(bend_dir, config['M3']['grid']['coords']))
     return m1_grid_xy, m3_grid_xy
 
 
 @lru_cache(maxsize=2)
 def m2_fea_nodes(fea_dir):
     data = fits.getdata(os.path.join(fea_dir, "M2_1um_grid.fits.gz"))
-    bx = -data[:, 1]  # meters
+    bx = data[:, 1]  # meters
     by = data[:, 2]
     return bx, by
 
 
 @lru_cache(maxsize=4)
 def m2_grid_xy(bend_dir):
-    return fits.getdata(os.path.join(bend_dir, "M2_bend_coords.fits.gz"))
+    with open(os.path.join(bend_dir, "bend.yaml")) as f:
+        config = yaml.safe_load(f)
+    return fits.getdata(os.path.join(bend_dir, config['M2']['grid']['coords']))
 
 
 @lru_cache(maxsize=16)
@@ -194,7 +198,7 @@ def m1m3_lut(fea_dir, zenith_angle, error, seed):
     G = _fits_cache(fea_dir, "M1M3_influence_256.fits.gz")
 
     if zenith_angle is None:
-        return np.zeros(G.shape[1])
+        return np.zeros(G.shape[0])
 
     from scipy.interpolate import interp1d
     data = _fits_cache(fea_dir, "M1M3_LUT.fits.gz")
@@ -224,6 +228,15 @@ def m1m3_lut(fea_dir, zenith_angle, error, seed):
     return G.dot(LUT_force - u0)
 
 
+def transform_zernike(zernike, R_outer, R_inner):
+    xy = zernike._coef_array_xy
+    ret = galsim.zernike.Zernike.__new__(galsim.zernike.Zernike)
+    ret._coef_array_xy = xy
+    ret.R_outer = R_outer
+    ret.R_inner = R_inner
+    return ret
+
+
 BendingMode = namedtuple(
     "BendingMode",
     "zk R_outer R_inner x y z dzdx dzdy d2zdxy"
@@ -251,22 +264,30 @@ def load_bend(bend_dir):
     return m1, m2, m3
 
 
+RealizedBend = namedtuple(
+    "RealizedBend",
+    "zk grid"
+)
+
 @lru_cache(maxsize=16*3)
-def mirror_bend(bend_dir, dof, i):
+def realize_bend(bend_dir, dof, i):
     modes = load_bend(bend_dir)[i]
     dof = np.array(dof)
-    return (
+    zk = galsim.zernike.Zernike(
         np.tensordot(dof, modes.zk, axes=1),
-        np.tensordot(dof, modes.z, axes=1),
-        np.tensordot(dof, modes.dzdx, axes=1),
-        np.tensordot(dof, modes.dzdy, axes=1),
-        np.tensordot(dof, modes.d2zdxy, axes=1)
+        R_outer=modes.R_outer,
+        R_inner=modes.R_inner
     )
+    z = np.tensordot(dof, modes.z, axes=1)
+    dzdx = np.tensordot(dof, modes.dzdx, axes=1)
+    dzdy = np.tensordot(dof, modes.dzdy, axes=1)
+    d2zdxy = np.tensordot(dof, modes.d2zdxy, axes=1)
+    return RealizedBend(zk, np.stack([z, dzdx, dzdy, d2zdxy]))
 
 
 @lru_cache(maxsize=16)
 def m2_gravity(fea_dir, zenith_angle):
-    data = _fits_cache(fea_dir, "M2_GT_grid.fits.gz")
+    data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     if zenith_angle is None:
         return np.zeros_like(zdz)
 
@@ -281,7 +302,7 @@ def m2_gravity(fea_dir, zenith_angle):
 
 @lru_cache(maxsize=16)
 def m2_temperature(fea_dir, TzGrad, TrGrad):
-    data = _fits_cache(fea_dir, "M2_GT_grid.fits.gz")
+    data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     tzdz, trdz = data[2:4]
 
     out = TzGrad * tzdz
@@ -590,7 +611,8 @@ class LSSTBuilder:
     def build(self):
         optic = self.fiducial
         optic = self._apply_rigid_body_perturbations(optic)
-        # optic = self._apply_surface_perturbations(optic)
+        optic = self._apply_M1M3_surface_perturbations(optic)
+        optic = self._apply_M2_surface_perturbations(optic)
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
@@ -625,7 +647,9 @@ class LSSTBuilder:
 
         return optic
 
-    def _apply_surface_perturbations(self, optic):
+    def _apply_M1M3_surface_perturbations(self, optic):
+        dof = self.dof
+        # Collect gravity/temperature perturbations
         m1m3_fea = m1m3_gravity(
             self.fea_dir, self.fiducial, self.m1m3_zenith_angle
         )
@@ -637,6 +661,7 @@ class LSSTBuilder:
             self.m1m3_TzGrad,
             self.m1m3_TrGrad
         )
+
         m1m3_fea += m1m3_lut(
             self.fea_dir,
             self.m1m3_lut_zenith_angle,
@@ -644,327 +669,163 @@ class LSSTBuilder:
             self.m1m3_lut_seed
         )
 
+        bx, by, idx1, idx3 = m1m3_fea_nodes(self.fea_dir)
         if np.any(m1m3_fea):
-            bx, by, idx1, idx3 = m1m3_fea_nodes(self.fea_dir)
-            zBasis = galsim.zernike.zernikeBasis(
-                28, -bx, by, R_outer=4.18
+            # Decompose into independent annular Zernikes+grid on M1 and M3
+            m1_fea = m1m3_fea[idx1]
+            m3_fea = m1m3_fea[idx3]
+
+            zBasis1 = galsim.zernike.zernikeBasis(
+                28, bx[idx1], by[idx1], R_outer=4.18, R_inner=2.558
             )
-            m1m3_zk, *_ = np.linalg.lstsq(zBasis.T, m1m3_fea, rcond=None)
-            zern = galsim.zernike.Zernike(m1m3_zk, R_outer=4.18)
-            m1m3_fea -= zern(-bx, by)
+            zBasis3 = galsim.zernike.zernikeBasis(
+                28, bx[idx3], by[idx3], R_outer=2.508, R_inner=0.55
+            )
+            m1_zk, *_ = np.linalg.lstsq(zBasis1.T, m1_fea, rcond=None)
+            m3_zk, *_ = np.linalg.lstsq(zBasis3.T, m3_fea, rcond=None)
+            m1_zk = galsim.zernike.Zernike(m1_zk, R_outer=4.18, R_inner=2.558)
+            m3_zk = galsim.zernike.Zernike(m3_zk, R_outer=2.508, R_inner=0.55)
+            m1_fea -= m1_zk(bx[idx1], by[idx1])
+            m3_fea -= m3_zk(bx[idx3], by[idx3])
 
             m1_grid = _node_to_grid(
-                bx[idx1], by[idx1], m1m3_fea[idx1], self.m1_grid_xy
+                bx[idx1], by[idx1], m1_fea, m1m3_grid_xy(self.bend_dir)[0]
             )
-
             m3_grid = _node_to_grid(
-                bx[idx3], by[idx3], m1m3_fea[idx3], self.m3_grid_xy
+                bx[idx3], by[idx3], m3_fea, m1m3_grid_xy(self.bend_dir)[1]
             )
-            m1_grid *= -1
-            m3_grid *= -1
-            m1m3_zk *= -1
-
-
-            self._m1_fea_grid = m1_grid
-            self._m3_fea_grid = m3_grid
-            self._m1m3_fea_zk = m1m3_zk
         else:
-            self._m1_fea_grid = None
-            self._m3_fea_grid = None
-            self._m1m3_fea_zk = None
+            m1_nx = m1m3_grid_xy(self.bend_dir)[0].shape[1]
+            m3_nx = m1m3_grid_xy(self.bend_dir)[1].shape[1]
+            m1_grid = np.zeros((4, m1_nx, m1_nx))
+            m3_grid = np.zeros((4, m3_nx, m3_nx))
+            m1_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=4.18, R_inner=2.558)
+            m3_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=2.508, R_inner=0.55)
 
+        # Fold in M1M3 bending modes
+        if np.any(dof[10:30]):
+            bend1 = realize_bend(self.bend_dir, tuple(dof[10:30]), 0)
+            bend3 = realize_bend(self.bend_dir, tuple(dof[10:30]), 2)
 
-    # def _consolidate_m1m3_fea(self):
-    #     # Take
-    #     #     _m1m3_fea_gravity,  _m1m3_fea_temperature, _m1m3_fea_lut
-    #     # and set
-    #     #     _m1_fea_grid, _m3_fea_grid, _m1m3_fea_zk
-    #     if self._m1_fea_grid is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m1m3_fea_gravity is None
-    #         and self._m1m3_fea_temperature is None
-    #         and self._m1m3_fea_lut is None
-    #     ):
-    #         self._m1_fea_grid = None
-    #         self._m3_fea_grid = None
-    #         self._m1m3_fea_zk = None
-    #         return
-    #     m1m3_fea = np.zeros(5256)
-    #     if self._m1m3_fea_gravity is not None:
-    #         m1m3_fea = self._m1m3_fea_gravity
-    #     if self._m1m3_fea_temperature is not None:
-    #         m1m3_fea += self._m1m3_fea_temperature
-    #     if self._m1m3_fea_lut is not None:
-    #         m1m3_fea += self._m1m3_fea_lut
+            m1_zk += transform_zernike(bend1.zk, R_outer=4.18, R_inner=2.558)
+            m3_zk += transform_zernike(bend3.zk, R_outer=2.508, R_inner=0.55)
 
-    #     if np.any(m1m3_fea):
-    #         bx, by = self.m1m3_fea_xy
-    #         idx1, idx3 = self.m1m3_fea_idx13
-    #         zBasis = galsim.zernike.zernikeBasis(
-    #             28, -bx, by, R_outer=4.18
-    #         )
-    #         m1m3_zk, *_ = np.linalg.lstsq(zBasis.T, m1m3_fea, rcond=None)
-    #         zern = galsim.zernike.Zernike(m1m3_zk, R_outer=4.18)
-    #         m1m3_fea -= zern(-bx, by)
+            m1_grid += bend1.grid
+            m3_grid += bend3.grid
 
-    #         m1_grid = _node_to_grid(
-    #             bx[idx1], by[idx1], m1m3_fea[idx1], self.m1_grid_xy
-    #         )
+        # Apply to M1
+        components = []
+        if np.any(m1_zk.coef):
+            components.append(
+                batoid.Zernike(
+                    m1_zk.coef, m1_zk.R_outer, m1_zk.R_inner
+                )
+            )
+        if np.any(m1_grid):
+            components.append(
+                batoid.Bicubic(
+                    *m1m3_grid_xy(self.bend_dir)[0],
+                    *m1_grid
+                )
+            )
+        if components:
+            if len(components) >= 2:
+                perturbation = batoid.Sum(components)
+            else:
+                perturbation = components[0]
+            optic = optic.withPerturbedSurface(
+                'M1',
+                perturbation
+            )
 
-    #         m3_grid = _node_to_grid(
-    #             bx[idx3], by[idx3], m1m3_fea[idx3], self.m3_grid_xy
-    #         )
-    #         m1_grid *= -1
-    #         m3_grid *= -1
-    #         m1m3_zk *= -1
-    #         self._m1_fea_grid = m1_grid
-    #         self._m3_fea_grid = m3_grid
-    #         self._m1m3_fea_zk = m1m3_zk
-    #     else:
-    #         self._m1_fea_grid = None
-    #         self._m3_fea_grid = None
-    #         self._m1m3_fea_zk = None
+        # Apply to M3
+        components = []
+        if np.any(m3_zk.coef):
+            components.append(
+                batoid.Zernike(
+                    m3_zk.coef, m3_zk.R_outer, m3_zk.R_inner
+                )
+            )
+        if np.any(m3_grid):
+            components.append(
+                batoid.Bicubic(
+                    *m1m3_grid_xy(self.bend_dir)[1],
+                    *m3_grid
+                )
+            )
+        if components:
+            if len(components) >= 2:
+                perturbation = batoid.Sum(components)
+            else:
+                perturbation = components[0]
+            optic = optic.withPerturbedSurface(
+                'M3',
+                perturbation
+            )
+        return optic
 
-    # def _consolidate_m1_grid(self):
-    #     # Take m1_fea_grid, m1_bend_grid and make m1_grid.
-    #     if self._m1_grid is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m1_bend_grid is None
-    #         and self._m1_fea_grid is None
-    #     ):
-    #         self._m1_grid = None
-    #         return
+    def _apply_M2_surface_perturbations(self, optic):
+        dof = self.dof
+        # Collect gravity/temperature perturbations
+        m2_fea = m2_gravity(
+            self.fea_dir, self.m2_zenith_angle
+        )
+        m2_fea += m2_temperature(
+            self.fea_dir,
+            self.m2_TzGrad,
+            self.m2_TrGrad
+        )
+        # m2_fea += m2_lut(
+        #     self.fea_dir,
+        #     self.m2_lut_zenith_angle,
+        # )
 
-    #     if self._m1_bend_grid is not None:
-    #         m1_grid = self._m1_bend_grid
-    #     else:
-    #         m1_grid = np.zeros((4, 204, 204))
-    #     if self._m1_fea_grid is not None:
-    #         m1_grid += self._m1_fea_grid
-    #     self._m1_grid = m1_grid
+        bx, by = m2_fea_nodes(self.fea_dir)
+        if np.any(m2_fea):
+            # Decompose into annular Zernikes+grid on M2
+            zBasis2 = galsim.zernike.zernikeBasis(
+                28, bx, by, R_outer=1.71, R_inner=0.9
+            )
+            m2_zk, *_ = np.linalg.lstsq(zBasis2.T, m2_fea, rcond=None)
+            m2_zk = galsim.zernike.Zernike(m2_zk, R_outer=1.71, R_inner=0.9)
+            m2_fea -= m2_zk(bx, by)
 
-    # def _consolidate_m3_grid(self):
-    #     # Take m3_fea_grid, m3_bend_grid and make m3_grid.
-    #     if self._m3_grid is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m3_bend_grid is None
-    #         and self._m3_fea_grid is None
-    #     ):
-    #         self._m3_grid = None
-    #         return
+            m2_grid = _node_to_grid(
+                bx, by, m2_fea, m2_grid_xy(self.bend_dir)
+            )
+        else:
+            m2_nx = m2_grid_xy(self.bend_dir).shape[1]
+            m2_grid = np.zeros((4, m2_nx, m2_nx))
+            m2_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=1.71, R_inner=0.9)
 
-    #     if self._m3_bend_grid is not None:
-    #         m3_grid = self._m3_bend_grid
-    #     else:
-    #         m3_grid = np.zeros((4, 204, 204))
-    #     if self._m3_fea_grid is not None:
-    #         m3_grid += self._m3_fea_grid
-    #     self._m3_grid = m3_grid
+        # Fold in M2 bending modes
+        if np.any(dof[30:50]):
+            bend2 = realize_bend(self.bend_dir, tuple(dof[30:50]), 0)
+            m2_zk += transform_zernike(bend2.zk, R_outer=1.71, R_inner=0.9)
+            m2_grid += bend2.grid
 
-    # def _consolidate_m1m3_zk(self):
-    #     if self._m1m3_zk is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m1m3_bend_zk is None
-    #         and self._m1m3_fea_zk is None
-    #     ):
-    #         self._m1m3_zk = None
-    #         return
-    #     m1m3_zk = np.zeros(29)
-    #     if self._m1m3_bend_zk is not None:
-    #         m1m3_zk += self._m1m3_bend_zk
-    #     if self._m1m3_fea_zk is not None:
-    #         m1m3_zk += self._m1m3_fea_zk
-    #     self._m1m3_zk = m1m3_zk
-
-    # def _consolidate_m2_fea(self):
-    #     if self._m2_fea_grid is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m2_fea_gravity is None
-    #         and self._m2_fea_temperature is None
-    #     ):
-    #         self._m2_fea_grid = None
-    #         self._m2_fea_zk = None
-    #         return
-    #     m2_fea = np.zeros(15984)
-    #     if self._m2_fea_gravity is not None:
-    #         m2_fea = self._m2_fea_gravity
-    #     if self._m2_fea_temperature is not None:
-    #         m2_fea += self._m2_fea_temperature
-
-    #     if np.any(m2_fea):
-    #         bx, by = self.m2_fea_xy
-    #         zBasis = galsim.zernike.zernikeBasis(
-    #             28, -bx, by, R_outer=1.71
-    #         )
-    #         m2_zk, *_ = np.linalg.lstsq(zBasis.T, m2_fea, rcond=None)
-    #         zern = galsim.zernike.Zernike(m2_zk, R_outer=1.71)
-    #         m2_fea -= zern(-bx, by)
-    #         m2_grid = _node_to_grid(
-    #             bx, by, m2_fea, self.m2_grid_xy
-    #         )
-    #         m2_grid *= -1
-    #         m2_zk *= -1
-    #         self._m2_fea_grid = m2_grid
-    #         self._m2_fea_zk = m2_zk
-    #     else:
-    #         self._m2_fea_grid = None
-    #         self._m2_fea_zk = None
-
-    # def _consolidate_m2_grid(self):
-    #     # Take m2_fea_grid, m2_bend_grid and make m2_grid.
-    #     if self._m2_grid is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m2_bend_grid is None
-    #         and self._m2_fea_grid is None
-    #     ):
-    #         self._m2_grid = None
-    #         return
-
-    #     if self._m2_bend_grid is not None:
-    #         m2_grid = self._m2_bend_grid
-    #     else:
-    #         m2_grid = np.zeros((4, 204, 204))
-    #     if self._m2_fea_grid is not None:
-    #         m2_grid += self._m2_fea_grid
-    #     self._m2_grid = m2_grid
-
-    # def _consolidate_m2_zk(self):
-    #     if self.m2_zk is not _Invalidated:
-    #         return
-    #     if (
-    #         self._m2_bend_zk is None
-    #         and self._m2_fea_zk is None
-    #     ):
-    #         self._m2_zk = None
-    #         return
-    #     m2_zk = np.zeros(29)
-    #     if self._m2_bend_zk is not None:
-    #         m2_zk += self._m2_bend_zk
-    #     if self._m2_fea_zk is not None:
-    #         m2_zk += self._m2_fea_zk
-    #     self._m2_zk = m2_zk
-
-    # def _consolidate_camera(self):
-    #     if self._camera_zk is not _Invalidated:
-    #         return
-    #     if (
-    #         self._camera_gravity_zk is None
-    #         and self._camera_temperature_zk is None
-    #     ):
-    #         self._camera_zk = None
-    #         return
-    #     zk = {}
-    #     for bname, radius in [
-    #         ('L1_entrance', 0.775),
-    #         ('L1_exit', 0.775),
-    #         ('L2_entrance', 0.551),
-    #         ('L2_exit', 0.551),
-    #         ('L3_entrance', 0.361),
-    #         ('L3_exit', 0.361),
-    #     ]:
-    #         zk[bname] = (np.zeros(29), radius)
-    #         if self._camera_gravity_zk is not None:
-    #             zk[bname][0][:] += self._camera_gravity_zk[bname]
-    #         if self._camera_temperature_zk is not None:
-    #             zk[bname][0][:] += self._camera_temperature_zk[bname]
-    #     self._camera_zk = zk
-
-    # def _apply_surface_perturbations(self, optic):
-    #     # M1
-    #     components = [optic['M1'].surface]
-    #     if np.any(self._m1_grid):
-    #         components.append(
-    #             batoid.Bicubic(
-    #                 *self.m1_grid_xy,
-    #                 *self._m1_grid,
-    #                 nanpolicy='zero'
-    #             )
-    #         )
-    #     if np.any(self._m1m3_zk):
-    #         components.append(
-    #             batoid.Zernike(self._m1m3_zk, R_outer=4.18)
-    #         )
-    #     if len(components) > 1:
-    #         optic = optic.withSurface('M1', batoid.Sum(components))
-
-    #     # M3
-    #     components = [optic['M3'].surface]
-    #     if np.any(self._m3_grid):
-    #         components.append(
-    #             batoid.Bicubic(
-    #                 *self.m3_grid_xy,
-    #                 *self._m3_grid,
-    #                 nanpolicy='zero'
-    #             )
-    #         )
-    #     if np.any(self._m1m3_zk):
-    #         components.append(
-    #             # Note, using M1 R_outer here intentionally.
-    #             batoid.Zernike(self._m1m3_zk, R_outer=4.18)
-    #         )
-    #     if len(components) > 1:
-    #         optic = optic.withSurface('M3', batoid.Sum(components))
-
-    #     # M2
-    #     components = [optic['M2'].surface]
-    #     if np.any(self._m2_grid):
-    #         components.append(
-    #             batoid.Bicubic(
-    #                 *self.m2_grid_xy,
-    #                 *self._m2_grid,
-    #                 nanpolicy='zero'
-    #             )
-    #         )
-    #     if np.any(self._m2_zk):
-    #         components.append(
-    #             batoid.Zernike(self._m2_zk, R_outer=1.71)
-    #         )
-    #     if len(components) > 1:
-    #         optic = optic.withSurface('M2', batoid.Sum(components))
-
-    #     # Camera
-    #     if self._camera_zk is not None:
-    #         for k, (zk, radius) in self._camera_zk.items():
-    #             optic = optic.withSurface(
-    #                 k,
-    #                 batoid.Sum([
-    #                     optic[k].surface,
-    #                     batoid.Zernike(zk, R_outer=radius)
-    #                 ])
-    #             )
-
-    #     return optic
-
-    # def build(self):
-    #     # Fill arrays (possibly with None if all dependencies are None)
-    #     # We're manually traversing the DAG effectively
-    #     self._compute_m1m3_gravity()
-    #     self._compute_m1m3_temperature()
-    #     self._compute_m1m3_lut()
-    #     self._consolidate_m1m3_fea()
-    #     self._compute_m1m3_bend()
-    #     self._consolidate_m1_grid()
-    #     self._consolidate_m3_grid()
-    #     self._consolidate_m1m3_zk()
-
-    #     self._compute_m2_gravity()
-    #     self._compute_m2_temperature()
-    #     self._consolidate_m2_fea()
-    #     self._compute_m2_bend()
-    #     self._consolidate_m2_grid()
-    #     self._consolidate_m2_zk()
-
-    #     self._compute_camera_gravity()
-    #     self._compute_camera_temperature()
-    #     self._consolidate_camera()
-
-    #     optic = self.fiducial
-    #     optic = self._apply_rigid_body_perturbations(optic)
-    #     optic = self._apply_surface_perturbations(optic)
-    #     return optic
+        # Apply to M2
+        components = []
+        if np.any(m2_zk.coef):
+            components.append(
+                batoid.Zernike(
+                    m2_zk.coef, m2_zk.R_outer, m2_zk.R_inner
+                )
+            )
+        if np.any(m2_grid):
+            components.append(
+                batoid.Bicubic(
+                    *m2_grid_xy(self.bend_dir),
+                    *m2_grid
+                )
+            )
+        if components:
+            if len(components) >= 2:
+                perturbation = batoid.Sum(components)
+            else:
+                perturbation = components[0]
+            optic = optic.withPerturbedSurface(
+                'M2',
+                perturbation
+            )
+        return optic
