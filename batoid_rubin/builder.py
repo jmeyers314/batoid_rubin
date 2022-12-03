@@ -7,8 +7,6 @@ import astropy.io.fits as fits
 import batoid
 import galsim
 import numpy as np
-from scipy.interpolate import CloughTocher2DInterpolator
-from scipy.spatial import Delaunay
 import yaml
 
 from .utils import _node_to_grid, _fits_cache
@@ -109,17 +107,7 @@ def m1m3_gravity(fea_dir, optic, zenith_angle):
 
 @lru_cache(maxsize=16)
 def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
-    bx, by, *_ = m1m3_fea_nodes(fea_dir)
-    normX = bx / 4.18
-    normY = by / 4.18
-
-    data = _fits_cache(fea_dir, "M1M3_thermal_FEA.fits.gz")
-    delaunay = Delaunay(data[:, 0:2])
-    tbdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(normX, normY)
-    txdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(normX, normY)
-    tydz = CloughTocher2DInterpolator(delaunay, data[:, 4])(normX, normY)
-    tzdz = CloughTocher2DInterpolator(delaunay, data[:, 5])(normX, normY)
-    trdz = CloughTocher2DInterpolator(delaunay, data[:, 6])(normX, normY)
+    tbdz, txdz, tydz, tzdz, trdz = _fits_cache(fea_dir, "M1M3_thermal_FEA.fits.gz")
 
     out = TBulk * tbdz
     out += TxGrad * txdz
