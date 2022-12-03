@@ -7,7 +7,7 @@
 [ ! -d orig ] && mkdir orig
 
 python M1M3_decompose_sag.py --input /Users/josh/src/M1M3_ML/data/myUdn3norm_156.mat orig/M1M3_decomposition_orig.pkl
-python M1M3_format_for_batoid.py --input orig/M1M3_decomposition_orig.pkl --outdir orig --nkeep 30
+python M1M3_format_for_batoid.py --input orig/M1M3_decomposition_orig.pkl --outdir orig --nkeep 20 --swap "[19,26]"
 
 python M2_decompose_sag.py --input /Users/josh/src/M2_FEA/data/M2_Udn3norm.mat orig/M2_decomposition_orig.pkl
-python M2_format_for_batoid.py --input orig/M2_decomposition_orig.pkl --outdir orig --nkeep 30
+python M2_format_for_batoid.py --input orig/M2_decomposition_orig.pkl --outdir orig --nkeep 20 --swap "[17,18,19,25,26,27]"
