@@ -41,7 +41,7 @@ def main(args):
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M1_bend_coords.fits"
+            "M1_bend_coords.fits.gz"
         ),
         np.stack([M1_x_grid, M1_x_grid]),
         overwrite=True
@@ -49,7 +49,7 @@ def main(args):
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M3_bend_coords.fits"
+            "M3_bend_coords.fits.gz"
         ),
         np.stack([M3_x_grid, M3_x_grid]),
         overwrite=True
@@ -57,7 +57,7 @@ def main(args):
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M1_bend_grid.fits"
+            "M1_bend_grid.fits.gz"
         ),
         np.stack([M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid]),
         overwrite=True
@@ -65,7 +65,7 @@ def main(args):
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M3_bend_grid.fits"
+            "M3_bend_grid.fits.gz"
         ),
         np.stack([M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid]),
         overwrite=True
@@ -74,7 +74,7 @@ def main(args):
         fits.writeto(
             os.path.join(
                 args.outdir,
-                "M13_bend_zk.fits"
+                "M13_bend_zk.fits.gz"
             ),
             M1M3zk,
             overwrite=True
@@ -83,7 +83,7 @@ def main(args):
         fits.writeto(
             os.path.join(
                 args.outdir,
-                "M1_bend_zk.fits"
+                "M1_bend_zk.fits.gz"
             ),
             M1zk,
             overwrite=True
@@ -91,7 +91,7 @@ def main(args):
         fits.writeto(
             os.path.join(
                 args.outdir,
-                "M3_bend_zk.fits"
+                "M3_bend_zk.fits.gz"
             ),
             M3zk,
             overwrite=True
