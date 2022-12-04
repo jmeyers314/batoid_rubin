@@ -32,6 +32,10 @@ def m1m3_fea_nodes(fea_dir):
     by = data[:, 2]
     idx1 = (idx == 1)
     idx3 = (idx == 3)
+    bx.flags.writeable = False
+    by.flags.writeable = False
+    idx1.flags.writeable = False
+    idx3.flags.writeable = False
     return bx, by, idx1, idx3
 
 
@@ -41,6 +45,8 @@ def m1m3_grid_xy(bend_dir):
         config = yaml.safe_load(f)
     m1_grid_xy = fits.getdata(os.path.join(bend_dir, config['M1']['grid']['coords']))
     m3_grid_xy = fits.getdata(os.path.join(bend_dir, config['M3']['grid']['coords']))
+    m1_grid_xy.flags.writeable = False
+    m3_grid_xy.flags.writeable = False
     return m1_grid_xy, m3_grid_xy
 
 
@@ -49,6 +55,8 @@ def m2_fea_nodes(fea_dir):
     data = fits.getdata(os.path.join(fea_dir, "M2_1um_grid.fits.gz"))
     bx = data[:, 1]  # meters
     by = data[:, 2]
+    bx.flags.writeable = False
+    by.flags.writeable = False
     return bx, by
 
 
@@ -56,7 +64,9 @@ def m2_fea_nodes(fea_dir):
 def m2_grid_xy(bend_dir):
     with open(os.path.join(bend_dir, "bend.yaml")) as f:
         config = yaml.safe_load(f)
-    return fits.getdata(os.path.join(bend_dir, config['M2']['grid']['coords']))
+    m2_grid_xy = fits.getdata(os.path.join(bend_dir, config['M2']['grid']['coords']))
+    m2_grid_xy.flags.writeable = False
+    return m2_grid_xy
 
 
 @lru_cache(maxsize=16)
@@ -102,6 +112,7 @@ def m1m3_gravity(fea_dir, optic, zenith_angle):
     zern = galsim.zernike.Zernike(coefs, R_outer=4.18, R_inner=2.558)
     dz -= zern(bx, by)
 
+    dz.flags.writeable = False
     return dz
 
 
@@ -115,6 +126,7 @@ def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
     out += TzGrad * tzdz
     out += TrGrad * trdz
     out *= 1e-6
+    out.flags.writeable = False
     return out
 
 
@@ -150,7 +162,9 @@ def m1m3_lut(fea_dir, zenith_angle, error, seed):
     hf = _fits_cache(fea_dir, "M1M3_force_horizon.fits.gz")
     u0 = zf * np.cos(zenith_angle)
     u0 += hf * np.sin(zenith_angle)
-    return G.dot(LUT_force - u0)
+    out = np.dot(G, (LUT_force - u0))
+    out.flags.writeable = False
+    return out
 
 
 def transform_zernike(zernike, R_outer, R_inner):
@@ -166,6 +180,9 @@ def _load_mirror_bend(bend_dir, config):
     zk = fits.getdata(os.path.join(bend_dir, config['zk']['file']))
     grid = fits.getdata(os.path.join(bend_dir, config['grid']['file']))
     coords = fits.getdata(os.path.join(bend_dir, config['grid']['coords']))
+    zk.flags.writeable = False
+    grid.flags.writeable = False
+    coords.flags.writeable = False
     return BendingMode(
         zk, config['zk']['R_outer'], config['zk']['R_inner'],
         coords[0], coords[1],
@@ -196,21 +213,23 @@ def realize_bend(bend_dir, dof, i):
     dzdx = np.tensordot(dof, modes.dzdx, axes=1)
     dzdy = np.tensordot(dof, modes.dzdy, axes=1)
     d2zdxy = np.tensordot(dof, modes.d2zdxy, axes=1)
-    return RealizedBend(zk, np.stack([z, dzdx, dzdy, d2zdxy]))
+    grid = np.stack([z, dzdx, dzdy, d2zdxy])
+    grid.flags.writeable = False
+    return RealizedBend(zk, grid)
 
 
 @lru_cache(maxsize=16)
 def m2_gravity(fea_dir, zenith_angle):
     data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     if zenith_angle is None:
-        return np.zeros_like(zdz)
+        return np.zeros_like(data[0])
 
     zdz, hdz = data[0:2]
 
     out = zdz * (np.cos(zenith_angle) - 1)
     out += hdz * np.sin(zenith_angle)
     out *= 1e-6  # micron -> meters
-
+    out.flags.writeable = False
     return out
 
 
@@ -222,7 +241,7 @@ def m2_temperature(fea_dir, TzGrad, TrGrad):
     out = TzGrad * tzdz
     out += TrGrad * trdz
     out *= 1e-6
-
+    out.flags.writeable = False
     return out
 
 
@@ -564,9 +583,10 @@ class LSSTBuilder:
     def _apply_M1M3_surface_perturbations(self, optic):
         dof = self.dof
         # Collect gravity/temperature perturbations
-        m1m3_fea = m1m3_gravity(
+        # be sure to make a copy here!
+        m1m3_fea = np.array(m1m3_gravity(
             self.fea_dir, self.fiducial, self.m1m3_zenith_angle
-        )
+        ))
         m1m3_fea += m1m3_temperature(
             self.fea_dir,
             self.m1m3_TBulk,
@@ -681,9 +701,10 @@ class LSSTBuilder:
     def _apply_M2_surface_perturbations(self, optic):
         dof = self.dof
         # Collect gravity/temperature perturbations
-        m2_fea = m2_gravity(
+        # be sure to make a copy here!
+        m2_fea = np.array(m2_gravity(
             self.fea_dir, self.m2_zenith_angle
-        )
+        ))
         m2_fea += m2_temperature(
             self.fea_dir,
             self.m2_TzGrad,
