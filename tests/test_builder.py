@@ -59,6 +59,7 @@ def test_builder():
         .with_m2_gravity(0.1)
         .with_m2_temperature(0.1, 0.1)
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
+        .with_m1m3_lut(0.1, 0.0, 0)
     )
 
     telescope = builder.build()

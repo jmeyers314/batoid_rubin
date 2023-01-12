@@ -26,6 +26,16 @@ def sub_ptt(opd):
     return opd
 
 
+from matplotlib.colors import LinearSegmentedColormap
+cmap = LinearSegmentedColormap.from_list('my_gradient', (
+    # Edit this gradient at https://eltos.github.io/gradient/#0:99AEFF-33.3:0025B3-50:000000-66.7:C7030D-100:FF9FA3
+    (0.000, (0.600, 0.682, 1.000)),
+    (0.333, (0.000, 0.145, 0.702)),
+    (0.500, (0.000, 0.000, 0.000)),
+    (0.667, (0.780, 0.012, 0.051)),
+    (1.000, (1.000, 0.624, 0.639))))
+
+
 class VisualizeApp:
     def __init__(self, fiducial, wavelength, fea_dir, bend_dir, debug=None):
         self.nupdate = 0
@@ -67,6 +77,9 @@ class VisualizeApp:
 
         self.dof_idx = 0
         self.dof_value = 0.0
+
+        self.actuator_idx = 0
+        self.actuator_value = 0.0
 
         # Output
         self.view = self._view()
@@ -137,7 +150,16 @@ class VisualizeApp:
             self.dof_idx_control,
             self.dof_value_control
         ])
-        self.actuator_control = ipywidgets.VBox()
+
+        self.actuator_idx_control = ipywidgets.BoundedIntText(value=0, min=0, max=255, description="index")
+        self.actuator_value_control = ipywidgets.FloatText(value=0.0, step=10.0, description="value (Newton)")
+
+
+        self.actuator_control = ipywidgets.VBox([
+            self.actuator_idx_control,
+            self.actuator_value_control
+        ])
+
         self.tab_control = ipywidgets.Tab()
         self.tab_control.children = [
             self.point_control,
@@ -147,6 +169,7 @@ class VisualizeApp:
             self.dof_control,
             self.actuator_control,
         ]
+
         # Lame interface, but works
         self.tab_control.set_title(0, 'Point')
         self.tab_control.set_title(1, 'M1M3')
@@ -186,6 +209,9 @@ class VisualizeApp:
 
         self.dof_idx_control.observe(self.handle_dof_idx, 'value')
         self.dof_value_control.observe(self.handle_dof_value, 'value')
+
+        self.actuator_idx_control.observe(self.handle_actuator_idx, 'value')
+        self.actuator_value_control.observe(self.handle_actuator_value, 'value')
 
         self.update()
 
@@ -289,17 +315,25 @@ class VisualizeApp:
         self.dof_value = change['new']
         self.update()
 
+    def handle_actuator_idx(self, change):
+        self.actuator_idx = change['new']
+        self.update()
+
+    def handle_actuator_value(self, change):
+        self.actuator_value = change['new']
+        self.update()
+
     def _view(self):
         self._fig, axes = plt.subplots(
-            nrows=2, ncols=2,
+            nrows=2, ncols=3,
             figsize=(6, 6),
             dpi=100,
-            facecolor='k'
+            facecolor='#111111'
         )
         self._canvas = self._fig.canvas
         self._canvas.header_visible=False
 
-        # Top = WF
+        # Top Left/Center = wavefronts
         self.wfp_ax = axes[0,0]
         self.wfp_img = self.wfp_ax.imshow(
             np.ones((255, 255)),
@@ -318,7 +352,7 @@ class VisualizeApp:
         )
         self.wfr_ax.set_title("Wavefront residual", color='w')
 
-        # Bottom = donuts
+        # Bottom Left/Center = donuts
         self.intra_ax = axes[1,0]
         self.intra_img = self.intra_ax.imshow(
             np.zeros((255, 255)),
@@ -336,6 +370,50 @@ class VisualizeApp:
             extent=np.r_[-1, 1, -1, 1]*0.2*255/2
         )
         self.extra_ax.set_title("Extra donut", color='w')
+
+        # Top Right = M1M3
+        self.m1m3_ax = axes[0,2]
+        self.m1m3_ax.set_facecolor('#111111')
+        x = np.linspace(-4.18, 4.18, 255)
+        xx, yy = np.meshgrid(x, x)
+        rr = np.hypot(xx, yy)
+        self.m1m3_mask = (
+            rr < 0.55
+        ) | (
+            (rr > 2.508) & (rr < 2.558)
+        ) | (
+            rr > 4.18
+        )
+        m1m3_arr = np.ma.array(
+            np.zeros((255, 255)),
+            mask=self.m1m3_mask
+        )
+        self.m1m3_img = self.m1m3_ax.imshow(
+            m1m3_arr,
+            vmin=-1.0, vmax=1.0,
+            cmap=cmap,
+            extent=np.r_[1, -1, 1, -1]*4.18
+        )
+        self.m1m3_ax.set_title("M1M3", color='w')
+
+        # Bottom Right = M2
+        self.m2_ax = axes[1,2]
+        self.m2_ax.set_facecolor('#111111')
+        x = np.linspace(-1.71, 1.71, 255)
+        xx, yy = np.meshgrid(x, x)
+        rr = np.hypot(xx, yy)
+        self.m2_mask = (rr < 0.9) | (rr > 1.71)
+        m2_arr = np.ma.array(
+            np.zeros((255, 255)),
+            mask=self.m2_mask
+        )
+        self.m2_img = self.m2_ax.imshow(
+            m2_arr,
+            vmin=-1.0, vmax=1.0,
+            cmap=cmap,
+            extent=np.r_[1, -1, 1, -1]*1.71
+        )
+        self.m2_ax.set_title("M2", color='w')
 
         self._fig.tight_layout()
         out = ipywidgets.Output()
@@ -395,6 +473,11 @@ class VisualizeApp:
             dof[self.dof_idx] = self.dof_value
             builder = builder.with_aos_dof(dof)
 
+        if self.actuator_value != 0.0:
+            forces = np.zeros(256)
+            forces[self.actuator_idx] = self.actuator_value
+            builder = builder.with_m1m3_extra_forces(forces)
+
         tel1 = builder.build()
         tel1 = tel1.withLocallyRotatedOptic(
             "LSSTCamera", batoid.RotZ(np.deg2rad(self.rotation))
@@ -452,6 +535,33 @@ class VisualizeApp:
 
         self.intra_img.set_array(di/np.max(di))
         self.extra_img.set_array(de/np.max(de))
+
+        # Update M1M3 shape
+        x = np.linspace(-4.18, 4.18, 255)
+        xx, yy = np.meshgrid(x, x)
+        rr = np.hypot(xx, yy)
+        w1 = (rr >= 2.558) & (rr <= 4.18)
+        w3 = (rr >= 0.55) & (rr <= 2.508)
+        sag = np.zeros((255, 255))
+        sag[w1] = tel1['M1'].surface.sag(xx[w1], yy[w1])
+        sag[w1] -= tel0['M1'].surface.sag(xx[w1], yy[w1])
+        sag[w3] = tel1['M3'].surface.sag(xx[w3], yy[w3])
+        sag[w3] -= tel0['M3'].surface.sag(xx[w3], yy[w3])
+        sag *= 1e6
+        m1m3_arr = np.ma.array(sag, mask=self.m1m3_mask)
+        self.m1m3_img.set_array(m1m3_arr)
+
+        # Update M2 shape
+        x = np.linspace(-1.71, 1.71, 255)
+        xx, yy = np.meshgrid(x, x)
+        rr = np.hypot(xx, yy)
+        w = (rr >= 0.9) & (rr <= 1.71)
+        sag = np.zeros((255, 255))
+        sag[w] = tel1['M2'].surface.sag(xx[w], yy[w])
+        sag[w] -= tel0['M2'].surface.sag(xx[w], yy[w])
+        sag *= 1e6
+        m2_arr = np.ma.masked_array(sag, mask=self.m2_mask)
+        self.m2_img.set_array(m2_arr)
 
         self._canvas.draw()
 

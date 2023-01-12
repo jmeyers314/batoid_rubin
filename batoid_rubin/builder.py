@@ -132,10 +132,8 @@ def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
 
 @lru_cache(maxsize=16)
 def m1m3_lut(fea_dir, zenith_angle, error, seed):
-    G = _fits_cache(fea_dir, "M1M3_influence_256.fits.gz")
-
     if zenith_angle is None:
-        return np.zeros(G.shape[0])
+        return np.zeros(256)
 
     from scipy.interpolate import interp1d
     data = _fits_cache(fea_dir, "M1M3_LUT.fits.gz")
@@ -162,7 +160,15 @@ def m1m3_lut(fea_dir, zenith_angle, error, seed):
     hf = _fits_cache(fea_dir, "M1M3_force_horizon.fits.gz")
     u0 = zf * np.cos(zenith_angle)
     u0 += hf * np.sin(zenith_angle)
-    out = np.dot(G, (LUT_force - u0))
+
+    out = LUT_force - u0
+    out.flags.writeable = False
+    return out
+
+
+def m1m3_force_to_surface(fea_dir, forces):
+    G = _fits_cache(fea_dir, "M1M3_influence_256.fits.gz")
+    out = np.dot(G, forces)
     out.flags.writeable = False
     return out
 
@@ -334,6 +340,11 @@ class LSSTBuilder:
         bend_dir : str
             Directory containing the bending mode files.
         """
+        # Number of FEA nodes and actuators is inferred from content of fea_dir.
+        # Number of bending modes is inferred from content of bend_dir.
+        # These can effect the sizes of intermediate numpy arrays, and also the
+        # required inputs for the with_aos_dof and with_*_forces methods.
+
         self.fiducial = fiducial
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
@@ -355,6 +366,7 @@ class LSSTBuilder:
         self.m1m3_lut_zenith_angle = None
         self.m1m3_lut_error = 0.0
         self.m1m3_lut_seed = 1
+        self.m1m3_extra_forces = np.zeros(256)
 
         self.m2_zenith_angle = None
         self.m2_TzGrad = 0.0
@@ -541,6 +553,24 @@ class LSSTBuilder:
         ret.dof = dof
         return ret
 
+    def with_m1m3_extra_forces(self, forces):
+        """Return new SSTBuilder that includes specified M1M3 extra forces
+
+        Parameters
+        ----------
+        forces : ndarray (256,)
+            M1M3 extra forces in N
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified M1M3 extra forces.
+        """
+        # Todo: should be able to index these by actuator ID too.
+        ret = copy(self)
+        ret.m1m3_extra_forces = forces
+        return ret
+
     def build(self):
         optic = self.fiducial
         optic = self._apply_rigid_body_perturbations(optic)
@@ -596,11 +626,17 @@ class LSSTBuilder:
             self.m1m3_TrGrad
         )
 
-        m1m3_fea += m1m3_lut(
+        m1m3_forces = np.array(m1m3_lut(
             self.fea_dir,
             self.m1m3_lut_zenith_angle,
             self.m1m3_lut_error,
             self.m1m3_lut_seed
+        ))
+        m1m3_forces += self.m1m3_extra_forces
+
+        m1m3_fea += m1m3_force_to_surface(
+            self.fea_dir,
+            m1m3_forces
         )
 
         bx, by, idx1, idx3 = m1m3_fea_nodes(self.fea_dir)
