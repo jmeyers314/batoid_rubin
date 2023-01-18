@@ -576,6 +576,7 @@ class LSSTBuilder:
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_M1M3_surface_perturbations(optic)
         optic = self._apply_M2_surface_perturbations(optic)
+        optic = self._apply_camera_surface_perturbations(optic)
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
@@ -799,4 +800,66 @@ class LSSTBuilder:
                 'M2',
                 perturbation
             )
+        return optic
+
+    def _apply_camera_surface_perturbations(self, optic):
+        rot = self.camera_rotation_angle
+        zen = self.camera_zenith_angle
+        TBulk = self.camera_TBulk
+
+        for tname, bname, radius in [
+            ('L1S1', 'L1_entrance', 0.775),
+            ('L1S2', 'L1_exit', 0.775),
+            ('L2S1', 'L2_entrance', 0.551),
+            ('L2S2', 'L2_exit', 0.551),
+            ('L3S1', 'L3_entrance', 0.361),
+            ('L3S2', 'L3_exit', 0.361)
+        ]:
+            data = _fits_cache(self.fea_dir, tname+"zer.fits.gz")
+            zk = np.zeros(28)
+            if zen is not None:
+                zk += data[0, 3:] * (np.cos(zen) - 1)
+                zk += (
+                    data[1, 3:] * np.cos(rot) +
+                    data[2, 3:] * np.sin(rot)
+                ) * np.sin(zen  )
+
+            if TBulk is not None:
+                TBulk1 = np.clip(
+                    TBulk,
+                    np.min(data[3:, 2])+0.001,
+                    np.max(data[3:, 2])-0.001
+                )
+                fidx = np.interp(TBulk1, data[3:, 2], np.arange(len(data[3:, 2])))+3
+                idx = int(np.floor(fidx))
+                whi = fidx - idx
+                wlo = 1 - whi
+                zk += wlo * data[idx, 3:] + whi * data[idx+1, 3:]
+
+                # subtract reference temperature zk (0 deg C is idx=5)
+                zk -= data[5, 3:]
+
+            # remap Andy -> Noll Zernike indices
+            zIdxMapping = [
+                1, 3, 2, 5, 4, 6, 8, 9, 7, 10, 13, 14, 12, 15, 11, 19, 18, 20,
+                17, 21, 16, 25, 24, 26, 23, 27, 22, 28
+            ]
+            zk = zk[[x - 1 for x in zIdxMapping]]
+            zk *= 1e-3  # mm -> m
+            # tsph -> batoid 0-index offset
+            zk = np.concatenate([[0], zk])
+
+            # Now need to flip x and z for Zemax -> batoid
+            for j in range(1, 29):
+                n, m = galsim.zernike.noll_to_zern(j)
+                if (n+(m>=0)) % 2 == 0:  # antisymmetric in x
+                    zk[j] *= -1
+            zk = -zk
+
+            if np.any(zk):
+                optic = optic.withPerturbedSurface(
+                    bname,
+                    batoid.Zernike(zk, R_outer=radius)
+                )
+
         return optic

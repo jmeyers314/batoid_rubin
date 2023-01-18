@@ -79,7 +79,13 @@ def main(args):
         overwrite=True
     )
 
-    # Worry about camera later...
+    # Just converting to FITS for now
+    for fn in [
+        "FPRB.txt", "L1RB.txt", "L1S2zer.txt", "L2S1zer.txt", "L3RB.txt", "L3S2zer.txt",
+        "FRB.txt", "L1S1zer.txt", "L2RB.txt", "L2S2zer.txt", "L3S1zer.txt"
+    ]:
+        arr = np.loadtxt(os.path.join(args.indir, "data", "camera", fn), skiprows=1)
+        fits.writeto(os.path.join(args.outdir, fn.replace(".txt", ".fits.gz")), arr, overwrite=True)
 
 
 if __name__ == "__main__":
