@@ -190,7 +190,7 @@ def _load_mirror_bend(bend_dir, config):
     grid.flags.writeable = False
     coords.flags.writeable = False
     return BendingMode(
-        zk, config['zk']['R_outer'], config['zk']['R_inner'],
+        zk, config['zk']['R_outer'], config['zk'].get('R_inner', 0.0),
         coords[0], coords[1],
         grid[0], grid[1], grid[2], grid[3]
     )
@@ -583,12 +583,12 @@ class LSSTBuilder:
         if np.any(dof[0:3]):
             optic = optic.withGloballyShiftedOptic(
                 "M2",
-                np.array([dof[1], dof[2], -dof[0]])*1e-6
+                np.array([-dof[1], dof[2], -dof[0]])*1e-6
             )
 
         if np.any(dof[3:5]):
             rx = batoid.RotX(np.deg2rad(-dof[3]/3600))
-            ry = batoid.RotY(np.deg2rad(-dof[4]/3600))
+            ry = batoid.RotY(np.deg2rad(dof[4]/3600))
             optic = optic.withLocallyRotatedOptic(
                 "M2",
                 rx @ ry
@@ -597,12 +597,12 @@ class LSSTBuilder:
         if np.any(dof[5:8]):
             optic = optic.withGloballyShiftedOptic(
                 self.cam_name,
-                np.array([dof[6], dof[7], -dof[5]])*1e-6
+                np.array([-dof[6], dof[7], -dof[5]])*1e-6
             )
 
         if np.any(dof[8:10]):
             rx = batoid.RotX(np.deg2rad(-dof[8]/3600))
-            ry = batoid.RotY(np.deg2rad(-dof[9]/3600))
+            ry = batoid.RotY(np.deg2rad(dof[9]/3600))
             optic = optic.withLocallyRotatedOptic(
                 self.cam_name,
                 rx @ ry
@@ -771,7 +771,7 @@ class LSSTBuilder:
 
         # Fold in M2 bending modes
         if np.any(dof[30:50]):
-            bend2 = realize_bend(self.bend_dir, tuple(dof[30:50]), 0)
+            bend2 = realize_bend(self.bend_dir, tuple(dof[30:50]), 1)
             m2_zk += transform_zernike(bend2.zk, R_outer=1.71, R_inner=0.9)
             m2_grid += bend2.grid
 
