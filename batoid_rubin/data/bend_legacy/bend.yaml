@@ -1,0 +1,21 @@
+M1:
+  grid:
+    coords: M1_bend_coords.fits.gz
+    file: M1_bend_grid.fits.gz
+  zk:
+    R_outer: 4.18
+    file: M13_bend_zk.fits.gz
+M2:
+  grid:
+    coords: M2_bend_coords.fits.gz
+    file: M2_bend_grid.fits.gz
+  zk:
+    R_outer: 1.71
+    file: M2_bend_zk.fits.gz
+M3:
+  grid:
+    coords: M3_bend_coords.fits.gz
+    file: M3_bend_grid.fits.gz
+  zk:
+    R_outer: 4.18
+    file: M13_bend_zk.fits.gz
