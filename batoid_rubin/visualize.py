@@ -568,7 +568,7 @@ class VisualizeApp:
     def display(self):
         from IPython.display import display
         self.app = ipywidgets.HBox([
-            self._view(),
+            self.view,
             self.tab_control
         ])
 
