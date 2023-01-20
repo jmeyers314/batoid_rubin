@@ -13,7 +13,9 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["batoid_rubin"]
+packages = [
+    "batoid_rubin",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "batoid_rubin.__version__"}

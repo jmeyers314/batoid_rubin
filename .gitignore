@@ -1,3 +1,4 @@
 **/*.ipynb_checkpoints
 batoid_rubin.egg-info
 **/__pycache__
+build
