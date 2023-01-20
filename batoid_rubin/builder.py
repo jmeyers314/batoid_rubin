@@ -346,6 +346,22 @@ class LSSTBuilder:
         # required inputs for the with_aos_dof and with_*_forces methods.
 
         self.fiducial = fiducial
+        import os
+
+        if not os.path.isdir(fea_dir):
+            # See if we can find the data in the batoid_rubin data directory.
+            from . import datadir
+            fea_dir = os.path.join(datadir, fea_dir)
+            if not os.path.isdir(fea_dir):
+                raise ValueError("Cannot infer fea_dir.")
+
+        if not os.path.isdir(bend_dir):
+            # See if we can find the data in the batoid_rubin data directory.
+            from . import datadir
+            bend_dir = os.path.join(datadir, bend_dir)
+            if not os.path.isdir(bend_dir):
+                raise ValueError("Cannot infer bend_dir.")
+
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
 
