@@ -83,7 +83,7 @@ class AlignGame:
 
 
         # Controls
-        kwargs = {'layout':{'width':'150px'}, 'style':{'description_width':'initial'}}
+        kwargs = {'layout':{'width':'180px'}, 'style':{'description_width':'initial'}}
         self.m2_dz_control = ipywidgets.FloatText(value=self.m2_dz, description="M2 dz (µm)", step=10, **kwargs)
         self.m2_dx_control = ipywidgets.FloatText(value=self.m2_dx, description="M2 dx (µm)", step=500, **kwargs)
         self.m2_dy_control = ipywidgets.FloatText(value=self.m2_dy, description="M2 dy (µm)", step=500, **kwargs)
@@ -96,13 +96,14 @@ class AlignGame:
         self.cam_Ry_control = ipywidgets.FloatText(value=self.cam_Ry, description="Cam Ry (arcsec)", step=10, **kwargs)
         self.randomize_control = ipywidgets.Button(description="Randomize")
         self.reveal_control = ipywidgets.Button(description="Reveal")
+        self.solve_control = ipywidgets.Button(description="Solve")
 
         self.controls = ipywidgets.VBox([
             self.m2_dz_control, self.m2_dx_control, self.m2_dy_control,
             self.m2_Rx_control, self.m2_Ry_control,
             self.cam_dz_control, self.cam_dx_control, self.cam_dy_control,
             self.cam_Rx_control, self.cam_Ry_control,
-            self.randomize_control, self.reveal_control
+            self.randomize_control, self.reveal_control, self.solve_control
         ])
 
         # Observers
@@ -118,6 +119,7 @@ class AlignGame:
         self.cam_Ry_control.observe(lambda change: self.handle_event(change, 'cam_Ry'), 'value')
         self.randomize_control.on_click(self.randomize)
         self.reveal_control.on_click(self.reveal)
+        self.solve_control.on_click(self.solve)
 
         self.view = self._view()
         self.textout = ipywidgets.Textarea(
@@ -156,7 +158,19 @@ class AlignGame:
         self.text += f"Cam dy: {self.offsets[7]:.2f} µm\n"
         self.text += f"Cam Rx: {self.offsets[8]:.2f} arcsec\n"
         self.text += f"Cam Ry: {self.offsets[9]:.2f} arcsec\n"
+        self.update()
 
+    def solve(self, b):
+        self.m2_dz = -self.offsets[0]
+        self.m2_dx = -self.offsets[1]
+        self.m2_dy = -self.offsets[2]
+        self.m2_Rx = -self.offsets[3]
+        self.m2_Ry = -self.offsets[4]
+        self.cam_dz = -self.offsets[5]
+        self.cam_dx = -self.offsets[6]
+        self.cam_dy = -self.offsets[7]
+        self.cam_Rx = -self.offsets[8]
+        self.cam_Ry = -self.offsets[9]
         self.update()
 
     def handle_event(self, change, attr):
