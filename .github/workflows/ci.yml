@@ -76,7 +76,7 @@ jobs:
 
       - name: Install test requirements
         run: |
-          pip install -U -r pytest
+          pip install -U pytest
 
       - name: List all installed packages for reference
         run: pip list
