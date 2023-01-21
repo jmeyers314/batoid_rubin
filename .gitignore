@@ -2,3 +2,4 @@
 batoid_rubin.egg-info
 **/__pycache__
 build
+dist
