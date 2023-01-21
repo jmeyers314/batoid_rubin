@@ -1,0 +1,97 @@
+name: batoid_rubin CI
+
+on:
+  push:
+    branches:
+      - main
+      - releases/*
+
+  pull_request:
+    branches:
+      - main
+      - releases/*
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        py: ['3.10', 3.11]
+        include:
+          - os: macos-latest
+            py: '3.10'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 2
+
+      - name: Print github context properties
+        run: |
+          echo 'event: ${{ github.event_name }}'
+          echo 'sha: ${{ github.sha }}'
+          echo 'ref: ${{ github.ref }}'
+          echo 'head_ref: ${{ github.head_ref }}'
+          echo 'base_ref: ${{ github.base_ref }}'
+          echo 'event.before: ${{ github.event.before }}'
+          echo 'event.after: ${{ github.event.after }}'
+
+      - name: Set up Python ${{ matrix.py }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pip
+            $HOME/Library/Caches/Homebrew
+            /usr/local/Cellar
+          key: ${{ runner.os }}-${{ matrix.py }}-${{ matrix.CXX}}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install libfftw, etc. on linux (needed for GalSim)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo ${{ matrix.os }}
+          sudo -H apt-get -qq update
+          sudo -H apt-get install -y libfftw3-dev libeigen3-dev
+
+      - name: Install libfftw, etc. on MacOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          # brew update takes forever to run.  Hopefully won't need to enable this too often.
+          # Note: The || true bit here is because brew returns an error code if everything is
+          #       already installed, which is goofy.  So || true means these always give
+          #       non-error values.  If there really is an error, we should notice later
+          #       when trying to use whatever package failed to install.
+          #brew update || true
+          brew install fftw wget || true
+          brew upgrade wget || true
+          brew link --overwrite fftw gcc wget || true
+          brew install eigen || true
+          brew link --overwrite eigen || true
+
+      - name: Install test requirements
+        run: |
+          pip install -U -r pytest
+
+      - name: List all installed packages for reference
+        run: pip list
+
+      - name: Build batoid_rubin
+        run: pip install .
+
+      - name: Run unit tests
+        run: pytest
+
+      - name: Pre-cache cleanup
+        continue-on-error: true
+        run: |
+          # This was helpful in Travis.  Not sure how important it is in GHA.
+          rm -rfv $HOME/.cache/pip/log
+          rm -rfv $HOME/.cache/pip/http
+          if ${{ runner.os == 'macOS' }}; then brew cleanup || true; fi
