@@ -69,9 +69,8 @@ jobs:
           #       non-error values.  If there really is an error, we should notice later
           #       when trying to use whatever package failed to install.
           #brew update || true
-          brew install fftw wget || true
-          brew upgrade wget || true
-          brew link --overwrite fftw gcc wget || true
+          brew install fftw || true
+          brew link --overwrite fftw || true
           brew install eigen || true
           brew link --overwrite eigen || true
 
