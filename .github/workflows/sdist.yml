@@ -32,14 +32,14 @@ jobs:
           ls -l dist
           tar tvfz dist/batoid_rubin-*.tar.gz
 
-      - name: Publish package to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
-
-      # - name: Publish to PyPI
+      # - name: Publish package to TestPyPI
       #   uses: pypa/gh-action-pypi-publish@release/v1
       #   with:
-      #       password: ${{ secrets.PYPI_PASSWORD }}
-      #       verbose: true
+      #     password: ${{ secrets.TEST_PYPI_TOKEN }}
+      #     repository_url: https://test.pypi.org/legacy/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+            password: ${{ secrets.PYPI_TOKEN }}
+            verbose: true
