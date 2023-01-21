@@ -1,3 +1,4 @@
+from pathlib import Path
 from collections import namedtuple
 from copy import copy
 from functools import lru_cache
@@ -26,7 +27,7 @@ RealizedBend = namedtuple(
 
 @lru_cache(maxsize=2)
 def m1m3_fea_nodes(fea_dir):
-    data = fits.getdata(os.path.join(fea_dir, "M1M3_1um_156_grid.fits.gz"))
+    data = fits.getdata(Path(fea_dir) / "M1M3_1um_156_grid.fits.gz")
     idx = data[:, 0]
     bx = data[:, 1]  # (5256,)
     by = data[:, 2]
@@ -41,10 +42,10 @@ def m1m3_fea_nodes(fea_dir):
 
 @lru_cache(maxsize=4)
 def m1m3_grid_xy(bend_dir):
-    with open(os.path.join(bend_dir, "bend.yaml")) as f:
+    with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
-    m1_grid_xy = fits.getdata(os.path.join(bend_dir, config['M1']['grid']['coords']))
-    m3_grid_xy = fits.getdata(os.path.join(bend_dir, config['M3']['grid']['coords']))
+    m1_grid_xy = fits.getdata(Path(bend_dir) / config['M1']['grid']['coords'])
+    m3_grid_xy = fits.getdata(Path(bend_dir) / config['M3']['grid']['coords'])
     m1_grid_xy.flags.writeable = False
     m3_grid_xy.flags.writeable = False
     return m1_grid_xy, m3_grid_xy
@@ -52,7 +53,7 @@ def m1m3_grid_xy(bend_dir):
 
 @lru_cache(maxsize=2)
 def m2_fea_nodes(fea_dir):
-    data = fits.getdata(os.path.join(fea_dir, "M2_1um_grid.fits.gz"))
+    data = fits.getdata(Path(fea_dir) / "M2_1um_grid.fits.gz")
     bx = data[:, 1]  # meters
     by = data[:, 2]
     bx.flags.writeable = False
@@ -62,9 +63,9 @@ def m2_fea_nodes(fea_dir):
 
 @lru_cache(maxsize=4)
 def m2_grid_xy(bend_dir):
-    with open(os.path.join(bend_dir, "bend.yaml")) as f:
+    with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
-    m2_grid_xy = fits.getdata(os.path.join(bend_dir, config['M2']['grid']['coords']))
+    m2_grid_xy = fits.getdata(Path(bend_dir) / config['M2']['grid']['coords'])
     m2_grid_xy.flags.writeable = False
     return m2_grid_xy
 
@@ -183,9 +184,9 @@ def transform_zernike(zernike, R_outer, R_inner):
 
 
 def _load_mirror_bend(bend_dir, config):
-    zk = fits.getdata(os.path.join(bend_dir, config['zk']['file']))
-    grid = fits.getdata(os.path.join(bend_dir, config['grid']['file']))
-    coords = fits.getdata(os.path.join(bend_dir, config['grid']['coords']))
+    zk = fits.getdata(Path(bend_dir) / config['zk']['file'])
+    grid = fits.getdata(Path(bend_dir) / config['grid']['file'])
+    coords = fits.getdata(Path(bend_dir) / config['grid']['coords'])
     zk.flags.writeable = False
     grid.flags.writeable = False
     coords.flags.writeable = False
@@ -198,7 +199,7 @@ def _load_mirror_bend(bend_dir, config):
 
 @lru_cache(maxsize=4)
 def load_bend(bend_dir):
-    with open(os.path.join(bend_dir, "bend.yaml")) as f:
+    with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
     m1 = _load_mirror_bend(bend_dir, config['M1'])
     m2 = _load_mirror_bend(bend_dir, config['M2'])
@@ -346,21 +347,23 @@ class LSSTBuilder:
         # required inputs for the with_aos_dof and with_*_forces methods.
 
         self.fiducial = fiducial
-        import os
+        fea_dir = Path(fea_dir)
+        bend_dir = Path(bend_dir)
 
-        if not os.path.isdir(fea_dir):
+        if not fea_dir.is_dir():
             # See if we can find the data in the batoid_rubin data directory.
             from . import datadir
-            fea_dir = os.path.join(datadir, fea_dir)
-            if not os.path.isdir(fea_dir):
+            fea_dir = datadir / fea_dir
+            if not fea_dir.is_dir():
                 raise ValueError("Cannot infer fea_dir.")
 
-        if not os.path.isdir(bend_dir):
+        if not bend_dir.is_dir():
             # See if we can find the data in the batoid_rubin data directory.
             from . import datadir
-            bend_dir = os.path.join(datadir, bend_dir)
-            if not os.path.isdir(bend_dir):
+            bend_dir = datadir / bend_dir
+            if not bend_dir.is_dir():
                 raise ValueError("Cannot infer bend_dir.")
+
 
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir

@@ -1,25 +1,12 @@
-import os
+from pathlib import Path
 
 import batoid
 import batoid_rubin
 import numpy as np
 
 
-fea_dir = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "batoid_rubin",
-    "data",
-    "fea"
-)
-
-bend_dir = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "batoid_rubin",
-    "data",
-    "bend_legacy"
-)
+fea_dir = Path(batoid_rubin.datadir) / "fea_legacy"
+bend_dir = Path(batoid_rubin.datadir) / "bend_legacy"
 
 
 def test_fea_nodes_load():

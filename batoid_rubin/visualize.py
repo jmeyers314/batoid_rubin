@@ -37,13 +37,13 @@ cmap = LinearSegmentedColormap.from_list('my_gradient', (
 
 
 class VisualizeApp:
-    def __init__(self, fiducial, wavelength, fea_dir, bend_dir, debug=None):
+    def __init__(self, fiducial, wavelength, fea_dir="fea_legacy", bend_dir="bend_legacy", debug=None):
         self.nupdate = 0
         if debug is None:
             debug = contextlib.redirect_stdout(None)
         self.debug = debug
         self.fiducial = fiducial
-        self.wavelength = 620e-9
+        self.wavelength = wavelength
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
 

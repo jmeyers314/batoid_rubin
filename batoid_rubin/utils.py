@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from functools import lru_cache
 
 import astropy.io.fits as fits
@@ -75,9 +75,4 @@ def _fits_cache(datadir, fn):
     out : ndarray
         Loaded data.
     """
-    return fits.getdata(
-        os.path.join(
-            datadir,
-            fn
-        )
-    )
+    return fits.getdata(Path(datadir) / fn)
