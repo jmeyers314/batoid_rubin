@@ -328,7 +328,7 @@ def LSSTCam_temperature(fea_dir, TBulk):
 
 
 class LSSTBuilder:
-    def __init__(self, fiducial, fea_dir=None, bend_dir=None):
+    def __init__(self, fiducial, fea_dir="fea_legacy", bend_dir="bend_legacy"):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
         Parameters
