@@ -126,6 +126,7 @@ class AlignGame:
             value=self.text,
             layout=ipywidgets.Layout(height="250pt", width="auto")
         )
+        self._pause_handler = False
         self.update()
 
     def randomize(self, b):
@@ -142,7 +143,7 @@ class AlignGame:
         self.cam_dy = 0.0
         self.cam_Rx = 0.0
         self.cam_Ry = 0.0
-        self.offsets = np.concatenate([offsets, np.zeros(40)])
+        self.offsets = np.round(np.concatenate([offsets, np.zeros(40)]), 2)
         self.text = 'Values Randomized!'
         self.update()
 
@@ -171,11 +172,12 @@ class AlignGame:
         self.cam_dy = -self.offsets[7]
         self.cam_Rx = -self.offsets[8]
         self.cam_Ry = -self.offsets[9]
+        self.reveal(None)
         self.update()
 
     def handle_event(self, change, attr):
-        with self.debug:
-            print(change)
+        if self._pause_handler:
+            return
         setattr(self, attr, change['new'])
         self.update()
 
@@ -254,6 +256,8 @@ class AlignGame:
         return out
 
     def update(self):
+        with self.debug:
+            print("updating")
 
         dof = [self.m2_dz, self.m2_dx, self.m2_dy, self.m2_Rx, self.m2_Ry]
         dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
@@ -269,6 +273,7 @@ class AlignGame:
 
         self.textout.value = self.text
 
+        self._pause_handler = True
         self.m2_dz_control.value = self.m2_dz
         self.m2_dx_control.value = self.m2_dx
         self.m2_dy_control.value = self.m2_dy
@@ -279,6 +284,7 @@ class AlignGame:
         self.cam_dy_control.value = self.cam_dy
         self.cam_Rx_control.value = self.cam_Rx
         self.cam_Ry_control.value = self.cam_Ry
+        self._pause_handler = False
 
     def display(self):
         from IPython.display import display
