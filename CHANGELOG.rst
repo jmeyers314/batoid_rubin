@@ -9,12 +9,13 @@ API Changes
 
 New Features
 ------------
+- Updated Alignment Game figure layout.
+- Added Zero button to Alignment Game.
 
 
 Performance Improvements
 ------------------------
 - Streamlined updates of the Alignment Game when solving.
-
 
 
 Bug Fixes
