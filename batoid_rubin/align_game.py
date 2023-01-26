@@ -183,19 +183,13 @@ class AlignGame:
 
     def _view(self):
         self._fig = fig = plt.figure(constrained_layout=True, figsize=(5, 5))
-        R44 = [["ex44", "in44"],
-               ["ex44", "in44"]]
-        R04 = [["in04", "in04"],
-               ["ex04", "ex04"]]
-        R00 = [["in00", "ex00"],
-                ["in00", "ex00"]]
-        R40 = [["ex40", "ex40"],
-                ["in40", "in40"]]
-        raftspec = [[R04, "R14", "R24", "R34", R44],
-                 ["R03", "R13", "R23", "R33", "R43"],
-                 ["R02", "R12", "R22", "R32", "R42"],
-                 ["R01", "R11", "R21", "R31", "R41"],
-                 [R00, "R00", "R10", "R20", R40]]
+        raftspec = [[  None, "in04",  None,  None,  None,   None,   None],
+                    [  None, "ex04", "R14", "R24", "R34", "ex44", "in44"],
+                    [  None,  "R03", "R13", "R23", "R33",  "R43",   None],
+                    [  None,  "R02", "R12", "R22", "R32",  "R42",   None],
+                    [  None,  "R01", "R11", "R21", "R31",  "R41",   None],
+                    ["in00", "ex00", "R00", "R10", "R20", "ex40",   None],
+                    [  None,   None,  None,  None,  None, "in40",   None]]
         self._axes = fig.subplot_mosaic(
             raftspec, empty_sentinel=None
         )
@@ -220,7 +214,7 @@ class AlignGame:
                 thy=(y-center[1])*factor
             else:
                 nphot = 50000
-                nx = 255
+                nx = 181
             # Redo WF centering
             if k == "in00":
                 thx, thy = -5.25*3.5/15, -5*3.5/15
@@ -256,9 +250,6 @@ class AlignGame:
         return out
 
     def update(self):
-        with self.debug:
-            print("updating")
-
         dof = [self.m2_dz, self.m2_dx, self.m2_dy, self.m2_Rx, self.m2_Ry]
         dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
         dof += [0]*40
