@@ -94,6 +94,7 @@ class AlignGame:
         self.cam_dy_control = ipywidgets.FloatText(value=self.cam_dy, description="Cam dy (µm)", step=2000, **kwargs)
         self.cam_Rx_control = ipywidgets.FloatText(value=self.cam_Rx, description="Cam Rx (arcsec)", step=10, **kwargs)
         self.cam_Ry_control = ipywidgets.FloatText(value=self.cam_Ry, description="Cam Ry (arcsec)", step=10, **kwargs)
+        self.zero_control = ipywidgets.Button(description="Zero")
         self.randomize_control = ipywidgets.Button(description="Randomize")
         self.reveal_control = ipywidgets.Button(description="Reveal")
         self.solve_control = ipywidgets.Button(description="Solve")
@@ -103,7 +104,8 @@ class AlignGame:
             self.m2_Rx_control, self.m2_Ry_control,
             self.cam_dz_control, self.cam_dx_control, self.cam_dy_control,
             self.cam_Rx_control, self.cam_Ry_control,
-            self.randomize_control, self.reveal_control, self.solve_control
+            self.zero_control, self.randomize_control,
+            self.reveal_control, self.solve_control
         ])
 
         # Observers
@@ -117,6 +119,7 @@ class AlignGame:
         self.cam_dy_control.observe(lambda change: self.handle_event(change, 'cam_dy'), 'value')
         self.cam_Rx_control.observe(lambda change: self.handle_event(change, 'cam_Rx'), 'value')
         self.cam_Ry_control.observe(lambda change: self.handle_event(change, 'cam_Ry'), 'value')
+        self.zero_control.on_click(self.zero)
         self.randomize_control.on_click(self.randomize)
         self.reveal_control.on_click(self.reveal)
         self.solve_control.on_click(self.solve)
@@ -127,6 +130,20 @@ class AlignGame:
             layout=ipywidgets.Layout(height="250pt", width="auto")
         )
         self._pause_handler = False
+
+    def zero(self, b):
+        self.m2_dz = 0.0
+        self.m2_dx = 0.0
+        self.m2_dy = 0.0
+        self.m2_Rx = 0.0
+        self.m2_Ry = 0.0
+        self.cam_dz = 0.0
+        self.cam_dx = 0.0
+        self.cam_dy = 0.0
+        self.cam_Rx = 0.0
+        self.cam_Ry = 0.0
+        self.offsets = np.zeros(50)
+        self.text = 'Values Zeroed!'
         self.update()
 
     def randomize(self, b):
