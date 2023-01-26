@@ -166,16 +166,16 @@ class AlignGame:
 
     def reveal(self, b):
         self.text = ""
-        self.text += f"M2 dz: {self.offsets[0]:.2f} µm\n"
-        self.text += f"M2 dx: {self.offsets[1]:.2f} µm\n"
-        self.text += f"M2 dy: {self.offsets[2]:.2f} µm\n"
-        self.text += f"M2 Rx: {self.offsets[3]:.2f} arcsec\n"
-        self.text += f"M2 Ry: {self.offsets[4]:.2f} arcsec\n"
-        self.text += f"Cam dz: {self.offsets[5]:.2f} µm\n"
-        self.text += f"Cam dx: {self.offsets[6]:.2f} µm\n"
-        self.text += f"Cam dy: {self.offsets[7]:.2f} µm\n"
-        self.text += f"Cam Rx: {self.offsets[8]:.2f} arcsec\n"
-        self.text += f"Cam Ry: {self.offsets[9]:.2f} arcsec\n"
+        self.text += f"M2 dz: {self.offsets[0]:.2f} µm\n\n"
+        self.text += f"M2 dx: {self.offsets[1]:.2f} µm\n\n"
+        self.text += f"M2 dy: {self.offsets[2]:.2f} µm\n\n"
+        self.text += f"M2 Rx: {self.offsets[3]:.2f} arcsec\n\n"
+        self.text += f"M2 Ry: {self.offsets[4]:.2f} arcsec\n\n"
+        self.text += f"Cam dz: {self.offsets[5]:.2f} µm\n\n"
+        self.text += f"Cam dx: {self.offsets[6]:.2f} µm\n\n"
+        self.text += f"Cam dy: {self.offsets[7]:.2f} µm\n\n"
+        self.text += f"Cam Rx: {self.offsets[8]:.2f} arcsec\n\n"
+        self.text += f"Cam Ry: {self.offsets[9]:.2f} arcsec\n\n"
         self.update()
 
     def solve(self, b):
