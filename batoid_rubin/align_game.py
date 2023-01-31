@@ -130,6 +130,7 @@ class AlignGame:
             layout=ipywidgets.Layout(height="250pt", width="auto")
         )
         self._pause_handler = False
+        self._is_playing = False
 
     def zero(self, b):
         self.m2_dz = 0.0
@@ -144,6 +145,7 @@ class AlignGame:
         self.cam_Ry = 0.0
         self.offsets = np.zeros(50)
         self.text = 'Values Zeroed!'
+        self._is_playing = False
         self.update()
 
     def randomize(self, b):
@@ -162,6 +164,7 @@ class AlignGame:
         self.cam_Ry = 0.0
         self.offsets = np.round(np.concatenate([offsets, np.zeros(40)]), 2)
         self.text = 'Values Randomized!'
+        self._is_playing = True
         self.update()
 
     def reveal(self, b):
@@ -176,9 +179,11 @@ class AlignGame:
         self.text += f"Cam dy: {self.offsets[7]:.2f} µm\n\n"
         self.text += f"Cam Rx: {self.offsets[8]:.2f} arcsec\n\n"
         self.text += f"Cam Ry: {self.offsets[9]:.2f} arcsec\n\n"
+        self._is_playing = False
         self.update()
 
     def solve(self, b):
+        self._is_playing = False
         self.m2_dz = -self.offsets[0]
         self.m2_dx = -self.offsets[1]
         self.m2_dy = -self.offsets[2]
@@ -259,6 +264,7 @@ class AlignGame:
             )
 
         self.wfe_text = fig.text(0.31, 0.89, "WFE", ha="left", va="center", fontsize=16)
+        self.win_text = fig.text(0.31, 0.96, "", ha="left", va="center", fontsize=16, color='red')
 
         self._canvas = fig.canvas
         self._canvas.header_visible = False
@@ -291,6 +297,10 @@ class AlignGame:
         for raft in self._rafts.values():
             raft.draw(telescope, seeing=0.5)
         self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm")
+        if self._is_playing:
+            if self.wfe < 0.5:
+                self.win_text.set_text("You Win!")
+                self._is_playing = False
         self._canvas.draw()
 
         self.textout.value = self.text
