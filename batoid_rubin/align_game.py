@@ -45,7 +45,11 @@ class Raft:
             jmax=66, eps=0.61
         )*self.wavelength  # meters
 
-    def draw(self, telescope, seeing):
+    def draw(self, telescope, seeing, rng=None):
+        if rng is None:
+            rng = np.random.default_rng()
+        elif isinstance(rng, int):
+            rng = np.random.default_rng(rng)
         if "in" in self.name:
             telescope = telescope.withGloballyShiftedOptic(
                 "Detector", [0, 0, -1.5e-3]
@@ -56,7 +60,7 @@ class Raft:
             )
         rv = batoid.RayVector.asPolar(
             optic=telescope, wavelength=self.wavelength,
-            nrandom=self.nphot,
+            nrandom=self.nphot, rng=rng,
             theta_x=np.deg2rad(self.thx), theta_y=np.deg2rad(self.thy)
         )
         telescope.trace(rv)
@@ -66,8 +70,8 @@ class Raft:
 
         # Convolve in a Gaussian
         scale = 10e-6 * seeing/2.35/0.2
-        rv.x[:] += np.random.normal(scale=scale, size=len(rv))
-        rv.y[:] += np.random.normal(scale=scale, size=len(rv))
+        rv.x[:] += rng.normal(scale=scale, size=len(rv))
+        rv.y[:] += rng.normal(scale=scale, size=len(rv))
 
         # Bin rays
         psf, _, _ = np.histogram2d(
@@ -78,10 +82,16 @@ class Raft:
 
 
 class AlignGame:
-    def __init__(self, debug=None):
+    def __init__(self, debug=None, rng=None):
         if debug is None:
             debug = contextlib.redirect_stdout(None)
         self.debug = debug
+        if rng is None:
+            rng = np.random.default_rng()
+        elif isinstance(rng, int):
+            rng = np.random.default_rng(rng)
+        self.rng = rng
+        self.offset_rng = np.random.default_rng(rng.integers(2**63))
 
         self.fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
         self.builder = batoid_rubin.LSSTBuilder(
@@ -183,7 +193,7 @@ class AlignGame:
     def randomize(self, b):
         # amplitudes
         amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
-        offsets = np.random.normal(scale=amp)
+        offsets = self.offset_rng.normal(scale=amp)
         self.m2_dz = 0.0
         self.m2_dx = 0.0
         self.m2_dy = 0.0
@@ -488,7 +498,7 @@ class AlignGame:
         self.wfe *= 500e-9*1e6  # microns
 
         for raft in self._rafts.values():
-            raft.draw(telescope, seeing=0.5)
+            raft.draw(telescope, seeing=0.5, rng=self.rng)
         self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm   iter: {self._n_iter}")
         if self._is_playing:
             if self.wfe < 0.5:
