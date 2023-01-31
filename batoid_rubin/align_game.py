@@ -258,6 +258,8 @@ class AlignGame:
                 img=ax.imshow(np.zeros((nx, nx)), vmin=0, vmax=1)
             )
 
+        self.wfe_text = fig.text(0.31, 0.89, "WFE", ha="left", va="center", fontsize=16)
+
         self._canvas = fig.canvas
         self._canvas.header_visible = False
 
@@ -275,8 +277,20 @@ class AlignGame:
         builder = self.builder.with_aos_dof(dof)
         telescope = builder.build()
 
+        self.dz = batoid.doubleZernike(
+            telescope,
+            np.deg2rad(1.75),
+            500e-9,
+            kmax=15,
+            jmax=37,
+            eps=0.61
+        )
+        self.wfe = np.sqrt(np.sum(np.square(self.dz[:, 4:])))
+        self.wfe *= 500e-9*1e6  # microns
+
         for raft in self._rafts.values():
             raft.draw(telescope, seeing=0.5)
+        self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm")
         self._canvas.draw()
 
         self.textout.value = self.text
