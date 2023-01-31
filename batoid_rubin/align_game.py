@@ -8,16 +8,36 @@ import numpy as np
 
 
 class Raft:
-    def __init__(self, name, thx, thy, nphot, img, wavelength=500e-9):
+    def __init__(self, name, thx, thy, nphot, img, fiducial, wavelength=500e-9):
         self.name = name
         self.thx = thx
         self.thy = thy
         self.nphot = nphot
         self.img = img
+        self.fiducial = fiducial
+        self.wavelength = wavelength
+
         self.bins = img.get_array().shape[0]
         bo2 = self.bins//2
         self.range = [[-bo2*10e-6, bo2*10e-6], [-bo2*10e-6, bo2*10e-6]]
-        self.wavelength = wavelength
+
+        if "in" in self.name:
+            telescope = self.fiducial.withGloballyShiftedOptic(
+                "Detector", [0, 0, -1.5e-3]
+            )
+        elif "ex" in self.name:
+            telescope = self.fiducial.withGloballyShiftedOptic(
+                "Detector", [0, 0, 1.5e-3]
+            )
+        else:
+            telescope = self.fiducial
+        self.z_ref = batoid.zernikeTA(
+            telescope, np.deg2rad(self.thx), np.deg2rad(self.thy),
+            self.wavelength,
+            nrad=20, naz=120,
+            reference='chief',
+            jmax=66, eps=0.61
+        )*self.wavelength  # meters
 
     def draw(self, telescope, seeing):
         if "in" in self.name:
@@ -263,7 +283,7 @@ class AlignGame:
                 thx, thy = 4.75*3.5/15, 5*3.5/15
 
             self._rafts[k] = Raft(
-                k, thx, thy, nphot=nphot,
+                k, thx, thy, nphot=nphot, fiducial=self.fiducial,
                 img=ax.imshow(np.zeros((nx, nx)), vmin=0, vmax=1)
             )
 
