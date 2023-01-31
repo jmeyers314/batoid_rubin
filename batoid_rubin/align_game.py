@@ -80,7 +80,7 @@ class AlignGame:
 
         self.offsets = np.zeros(50)
         self.text = ""
-
+        self._n_iter = 0
 
         # Controls
         kwargs = {'layout':{'width':'180px'}, 'style':{'description_width':'initial'}}
@@ -146,6 +146,7 @@ class AlignGame:
         self.offsets = np.zeros(50)
         self.text = 'Values Zeroed!'
         self._is_playing = False
+        self._n_iter = 0
         self.update()
 
     def randomize(self, b):
@@ -165,6 +166,7 @@ class AlignGame:
         self.offsets = np.round(np.concatenate([offsets, np.zeros(40)]), 2)
         self.text = 'Values Randomized!'
         self._is_playing = True
+        self._n_iter = 0
         self.update()
 
     def reveal(self, b):
@@ -201,6 +203,8 @@ class AlignGame:
         if self._pause_handler:
             return
         setattr(self, attr, change['new'])
+        if self._is_playing:
+            self._n_iter += 1
         self.update()
 
     def _view(self):
@@ -296,7 +300,7 @@ class AlignGame:
 
         for raft in self._rafts.values():
             raft.draw(telescope, seeing=0.5)
-        self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm")
+        self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm   iter: {self._n_iter}")
         if self._is_playing:
             if self.wfe < 0.5:
                 self.win_text.set_text("You Win!")
