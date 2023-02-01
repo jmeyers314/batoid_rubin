@@ -249,7 +249,7 @@ class AlignGame:
         dof_fit = np.round(dof_fit, 2)
         full_dof = np.zeros(10)
         full_dof[[0,1,2,6,7,8,9]] = dof_fit
-        self.apply_dof(full_dof)
+        self.apply_dof(-full_dof)
 
     def control_penalty(self, b):
         # Add rows to sens matrix to penalize large dof
@@ -261,7 +261,7 @@ class AlignGame:
             sens[i, i-9] = alpha
         dof_fit, _, _, _ = lstsq(sens, np.concatenate([dz_fit, [0]*10]))
         dof_fit = np.round(dof_fit, 2)
-        self.apply_dof(dof_fit)
+        self.apply_dof(-dof_fit)
 
     def fit_dz(self):
         # Wavefront estimation part of the control loop.
@@ -385,16 +385,16 @@ class AlignGame:
             print(f"cam Rx: {dof[8]:10.2f} arcsec")
             print(f"cam Ry: {dof[9]:10.2f} arcsec")
         self._is_playing = False
-        self.m2_dz -= dof[0]
-        self.m2_dx -= dof[1]
-        self.m2_dy -= dof[2]
-        self.m2_Rx -= dof[3]
-        self.m2_Ry -= dof[4]
-        self.cam_dz -= dof[5]
-        self.cam_dx -= dof[6]
-        self.cam_dy -= dof[7]
-        self.cam_Rx -= dof[8]
-        self.cam_Ry -= dof[9]
+        self.m2_dz += dof[0]
+        self.m2_dx += dof[1]
+        self.m2_dy += dof[2]
+        self.m2_Rx += dof[3]
+        self.m2_Ry += dof[4]
+        self.cam_dz += dof[5]
+        self.cam_dx += dof[6]
+        self.cam_dy += dof[7]
+        self.cam_Rx += dof[8]
+        self.cam_Ry += dof[9]
 
         self.update()
 
