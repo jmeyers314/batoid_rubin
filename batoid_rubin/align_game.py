@@ -172,6 +172,7 @@ class AlignGame:
         )
         self._pause_handler = False
         self._is_playing = False
+        self._control_history = []
 
     def zero(self, b):
         self.m2_dz = 0.0
@@ -189,6 +190,22 @@ class AlignGame:
         self._is_playing = False
         self._n_iter = 0
         self.update()
+        self._control_history = []
+        self._control_history.append(
+            (
+                self.wfe,
+                self.m2_dz,
+                self.m2_dx,
+                self.m2_dy,
+                self.m2_Rx,
+                self.m2_Ry,
+                self.cam_dz,
+                self.cam_dx,
+                self.cam_dy,
+                self.cam_Rx,
+                self.cam_Ry,
+            )
+        )
 
     def randomize(self, b):
         # amplitudes
@@ -209,6 +226,22 @@ class AlignGame:
         self._is_playing = True
         self._n_iter = 0
         self.update()
+        self._control_history = []
+        self._control_history.append(
+            (
+                self.wfe,
+                self.m2_dz,
+                self.m2_dx,
+                self.m2_dy,
+                self.m2_Rx,
+                self.m2_Ry,
+                self.cam_dz,
+                self.cam_dx,
+                self.cam_dy,
+                self.cam_Rx,
+                self.cam_Ry,
+            )
+        )
 
     def reveal(self, b):
         self.text = ""
@@ -250,6 +283,7 @@ class AlignGame:
         full_dof = np.zeros(10)
         full_dof[[0,1,2,6,7,8,9]] = dof_fit
         self.apply_dof(-full_dof)
+        self._plot_control_history()
 
     def control_penalty(self, b):
         # Add rows to sens matrix to penalize large dof
@@ -262,6 +296,48 @@ class AlignGame:
         dof_fit, _, _, _ = lstsq(sens, np.concatenate([dz_fit, [0]*10]))
         dof_fit = np.round(dof_fit, 2)
         self.apply_dof(-dof_fit)
+        self._plot_control_history()
+
+    def _plot_control_history(self):
+        self._control_history.append(
+            (
+                self.wfe,
+                self.m2_dz,
+                self.m2_dx,
+                self.m2_dy,
+                self.m2_Rx,
+                self.m2_Ry,
+                self.cam_dz,
+                self.cam_dx,
+                self.cam_dy,
+                self.cam_Rx,
+                self.cam_Ry,
+            )
+        )
+        with self.debug:
+            with contextlib.suppress(AttributeError):
+                fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(8, 2))
+                axes[0].plot([x[0] for x in self._control_history], c='k')
+                axes[1].plot([x[1] for x in self._control_history], c='b')
+                axes[1].plot([x[6] for x in self._control_history], c='r')
+                axes[2].plot([x[2] for x in self._control_history], c='b', ls='--')
+                axes[2].plot([x[3] for x in self._control_history], c='b', ls=':')
+                axes[2].plot([x[7] for x in self._control_history], c='r', ls='--')
+                axes[2].plot([x[8] for x in self._control_history], c='r', ls=':')
+                axes[3].plot([x[4] for x in self._control_history], c='b', ls='--')
+                axes[3].plot([x[5] for x in self._control_history], c='b', ls=':')
+                axes[3].plot([x[9] for x in self._control_history], c='r', ls='--')
+                axes[3].plot([x[10] for x in self._control_history], c='r', ls=':')
+
+                axes[0].set_ylabel("WFE (nm)")
+                axes[1].set_ylabel("dz (µm)")
+                axes[2].set_ylabel("dx, dy (µm)")
+                axes[3].set_ylabel("Rx, Ry (arcsec)")
+                for ax in axes:
+                    ax.set_xlabel("Iteration")
+
+                fig.tight_layout()
+                plt.show(fig)
 
     def fit_dz(self):
         # Wavefront estimation part of the control loop.
