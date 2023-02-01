@@ -310,32 +310,35 @@ class AlignGame:
         guess = [0.0]*nstar + [0.0]*nstar + [0.5] + [0.0]*len(dz_terms)
         sky_levels = [sky_level]*nstar
 
-        result = least_squares(
-            fitter.chi, guess, jac=fitter.jac,
-            ftol=1e-3, xtol=1e-3, gtol=1e-3,
-            max_nfev=20, verbose=2,
-            args=(imgs, sky_levels)
-        )
+        with self.debug:
+            print()
+            result = least_squares(
+                fitter.chi, guess, jac=fitter.jac,
+                ftol=1e-3, xtol=1e-3, gtol=1e-3,
+                max_nfev=20, verbose=2,
+                args=(imgs, sky_levels)
+            )
 
         dxs_fit, dys_fit, fwhm_fit, dz_fit = fitter.unpack_params(result.x)
 
         with self.debug:
-            mods = fitter.model(
-                dxs_fit, dys_fit, fwhm_fit, dz_fit
-            )
-            fig, axes = plt.subplots(nrows=2, ncols=8, figsize=(8, 2))
-            for i in range(8):
-                axes[0,i].imshow(imgs[i]/np.sum(imgs[i]))
-                axes[1,i].imshow(mods[i]/np.sum(mods[i]))
-                axes[0,i].set_title(names[i])
-            for ax in axes.ravel():
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_aspect('equal')
-            axes[0, 0].set_ylabel('Data')
-            axes[1, 0].set_ylabel('Model')
-            fig.tight_layout()
-            plt.show(fig)
+            with contextlib.suppress(AttributeError):
+                mods = fitter.model(
+                    dxs_fit, dys_fit, fwhm_fit, dz_fit
+                )
+                fig, axes = plt.subplots(nrows=2, ncols=8, figsize=(8, 2))
+                for i in range(8):
+                    axes[0,i].imshow(imgs[i]/np.sum(imgs[i]))
+                    axes[1,i].imshow(mods[i]/np.sum(mods[i]))
+                    axes[0,i].set_title(names[i])
+                for ax in axes.ravel():
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.set_aspect('equal')
+                axes[0, 0].set_ylabel('Data')
+                axes[1, 0].set_ylabel('Model')
+                fig.tight_layout()
+                plt.show(fig)
 
             print()
             print("Found double Zernikes:")
