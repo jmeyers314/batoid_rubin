@@ -193,7 +193,7 @@ class AlignGame:
     def randomize(self, b):
         # amplitudes
         amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
-        offsets = self.offset_rng.normal(scale=amp)
+        offsets = self.offset_rng.normal(scale=amp)*2
         self.m2_dz = 0.0
         self.m2_dx = 0.0
         self.m2_dy = 0.0
