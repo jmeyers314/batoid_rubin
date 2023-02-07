@@ -82,7 +82,9 @@ class Raft:
 
 
 class AlignGame:
-    def __init__(self, debug=None, rng=None):
+    def __init__(self, debug=None, rng=None, nthread=8):
+        batoid._batoid.set_nthreads(nthread)
+
         if debug is None:
             debug = contextlib.redirect_stdout(None)
         self.debug = debug
