@@ -331,7 +331,7 @@ class AlignGame:
                 axes[3].plot([x[9] for x in self._control_history], c='r', ls='--')
                 axes[3].plot([x[10] for x in self._control_history], c='r', ls=':')
 
-                axes[0].set_ylabel("WFE (nm)")
+                axes[0].set_ylabel("WFE (µm)")
                 axes[1].set_ylabel("dz (µm)")
                 axes[2].set_ylabel("dx, dy (µm)")
                 axes[3].set_ylabel("Rx, Ry (arcsec)")
