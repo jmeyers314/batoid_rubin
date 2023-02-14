@@ -2,6 +2,7 @@ from pathlib import Path
 from collections import namedtuple
 from copy import copy
 from functools import lru_cache
+from numbers import Real
 import os
 
 import astropy.io.fits as fits
@@ -410,6 +411,9 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M1M3 gravitation flexure applied.
         """
+        if isinstance(zenith_angle, Real):
+            zenith_angle = zenith_angle * galsim.radians
+
         ret = copy(self)
         ret.m1m3_zenith_angle = zenith_angle
         return ret
@@ -465,6 +469,9 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M1M3 LUT applied.
         """
+        if isinstance(zenith_angle, Real):
+            zenith_angle = zenith_angle * galsim.radians
+
         ret = copy(self)
         ret.m1m3_lut_zenith_angle = zenith_angle
         ret.m1m3_lut_error=error
@@ -484,6 +491,9 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M2 gravitation flexure applied.
         """
+        if isinstance(zenith_angle, Real):
+            zenith_angle = zenith_angle * galsim.radians
+
         ret = copy(self)
         ret.m2_zenith_angle = zenith_angle
         return ret
@@ -527,6 +537,11 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with camera gravitation flexure applied.
         """
+        if isinstance(zenith_angle, Real):
+            zenith_angle = zenith_angle * galsim.radians
+        if isinstance(rotation_angle, Real):
+            rotation_angle = rotation_angle * galsim.radians
+
         ret = copy(self)
         ret.camera_zenith_angle = zenith_angle
         ret.camera_rotation_angle = rotation_angle
@@ -635,7 +650,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m1m3_fea = np.array(m1m3_gravity(
-            self.fea_dir, self.fiducial, self.m1m3_zenith_angle
+            self.fea_dir, self.fiducial, self.m1m3_zenith_angle.rad
         ))
         m1m3_fea += m1m3_temperature(
             self.fea_dir,
@@ -648,7 +663,7 @@ class LSSTBuilder:
 
         m1m3_forces = np.array(m1m3_lut(
             self.fea_dir,
-            self.m1m3_lut_zenith_angle,
+            self.m1m3_lut_zenith_angle.rad,
             self.m1m3_lut_error,
             self.m1m3_lut_seed
         ))
@@ -759,7 +774,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m2_fea = np.array(m2_gravity(
-            self.fea_dir, self.m2_zenith_angle
+            self.fea_dir, self.m2_zenith_angle.rad
         ))
         m2_fea += m2_temperature(
             self.fea_dir,
@@ -768,7 +783,7 @@ class LSSTBuilder:
         )
         # m2_fea += m2_lut(
         #     self.fea_dir,
-        #     self.m2_lut_zenith_angle,
+        #     self.m2_lut_zenith_angle.rad,
         # )
 
         bx, by = m2_fea_nodes(self.fea_dir)
@@ -822,8 +837,12 @@ class LSSTBuilder:
         return optic
 
     def _apply_camera_surface_perturbations(self, optic):
-        rot = self.camera_rotation_angle
-        zen = self.camera_zenith_angle
+        if self.camera_zenith_angle is None:
+            zen = None
+            rot = None
+        else:
+            zen = self.camera_zenith_angle.rad
+            rot = self.camera_rotation_angle.rad
         TBulk = self.camera_TBulk
 
         for tname, bname, radius in [

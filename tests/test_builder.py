@@ -2,6 +2,7 @@ from pathlib import Path
 
 import batoid
 import batoid_rubin
+import galsim
 import numpy as np
 
 
@@ -64,3 +65,17 @@ def test_builder():
     )
     telescope2 = builder2.build()
     assert telescope == telescope2
+
+    # Check galsim.Angle interface too.
+    builder3 = batoid_rubin.LSSTBuilder(fiducial)
+    builder3 = (
+        builder3
+        .with_m1m3_gravity(0.1*galsim.radians)
+        .with_m1m3_temperature(0.0, 0.1, -0.1, 0.1, 0.1)
+        .with_m2_gravity(0.1*galsim.radians)
+        .with_m2_temperature(0.1, 0.1)
+        .with_aos_dof(np.array([0]*19+[1]+[0]*30))
+        .with_m1m3_lut(0.1*galsim.radians, 0.0, 0)
+    )
+    telescope3 = builder3.build()
+    assert telescope == telescope3
