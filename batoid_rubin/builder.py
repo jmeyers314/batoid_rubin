@@ -78,6 +78,7 @@ def m1m3_gravity(fea_dir, optic, zenith_angle):
 
     if zenith_angle is None:
         return np.zeros_like(zdata[:,2])
+    zenith_angle = zenith_angle.rad
 
     dxyz = (
         zdata * np.cos(zenith_angle) +
@@ -136,6 +137,7 @@ def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
 def m1m3_lut(fea_dir, zenith_angle, error, seed):
     if zenith_angle is None:
         return np.zeros(256)
+    zenith_angle = zenith_angle.rad
 
     from scipy.interpolate import interp1d
     data = _fits_cache(fea_dir, "M1M3_LUT.fits.gz")
@@ -231,6 +233,7 @@ def m2_gravity(fea_dir, zenith_angle):
     data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     if zenith_angle is None:
         return np.zeros_like(data[0])
+    zenith_angle = zenith_angle.rad
 
     zdz, hdz = data[0:2]
 
@@ -650,7 +653,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m1m3_fea = np.array(m1m3_gravity(
-            self.fea_dir, self.fiducial, self.m1m3_zenith_angle.rad
+            self.fea_dir, self.fiducial, self.m1m3_zenith_angle
         ))
         m1m3_fea += m1m3_temperature(
             self.fea_dir,
@@ -663,7 +666,7 @@ class LSSTBuilder:
 
         m1m3_forces = np.array(m1m3_lut(
             self.fea_dir,
-            self.m1m3_lut_zenith_angle.rad,
+            self.m1m3_lut_zenith_angle,
             self.m1m3_lut_error,
             self.m1m3_lut_seed
         ))
@@ -774,7 +777,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m2_fea = np.array(m2_gravity(
-            self.fea_dir, self.m2_zenith_angle.rad
+            self.fea_dir, self.m2_zenith_angle
         ))
         m2_fea += m2_temperature(
             self.fea_dir,
@@ -783,7 +786,7 @@ class LSSTBuilder:
         )
         # m2_fea += m2_lut(
         #     self.fea_dir,
-        #     self.m2_lut_zenith_angle.rad,
+        #     self.m2_lut_zenith_angle,
         # )
 
         bx, by = m2_fea_nodes(self.fea_dir)
@@ -860,7 +863,7 @@ class LSSTBuilder:
                 zk += (
                     data[1, 3:] * np.cos(rot) +
                     data[2, 3:] * np.sin(rot)
-                ) * np.sin(zen  )
+                ) * np.sin(zen)
 
             if TBulk is not None:
                 TBulk1 = np.clip(

@@ -9,6 +9,9 @@ import numpy as np
 fea_dir = Path(batoid_rubin.datadir) / "fea_legacy"
 bend_dir = Path(batoid_rubin.datadir) / "bend_legacy"
 
+zen = 30 * galsim.degrees
+rot = 15 * galsim.degrees
+
 
 def test_fea_nodes_load():
     bx, by, idx1, idx3 = batoid_rubin.builder.m1m3_fea_nodes(fea_dir)
@@ -22,13 +25,12 @@ def test_grid_xy_load():
 
 def test_fea():
     telescope = batoid.Optic.fromYaml("LSST_r.yaml")
-    grav = batoid_rubin.builder.m1m3_gravity(fea_dir, telescope, 0.1)
+    grav = batoid_rubin.builder.m1m3_gravity(fea_dir, telescope, zen)
     temp = batoid_rubin.builder.m1m3_temperature(fea_dir, 0.0, 0.0, 0.0, 0.0, 0.0)
-    lut = batoid_rubin.builder.m1m3_lut(fea_dir, 0.1, 0.0, 0)
+    lut = batoid_rubin.builder.m1m3_lut(fea_dir, zen, 0.0, 0)
 
-    grav = batoid_rubin.builder.m2_gravity(fea_dir, 0.1)
+    grav = batoid_rubin.builder.m2_gravity(fea_dir, zen)
     temp = batoid_rubin.builder.m2_temperature(fea_dir, 0.0, 0.0)
-
 
 def test_load_bend():
     dof = (0,)*20
@@ -42,12 +44,12 @@ def test_builder():
     builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
     builder = (
         builder
-        .with_m1m3_gravity(0.1)
+        .with_m1m3_gravity(zen)
         .with_m1m3_temperature(0.0, 0.1, -0.1, 0.1, 0.1)
-        .with_m2_gravity(0.1)
+        .with_m2_gravity(zen)
         .with_m2_temperature(0.1, 0.1)
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
-        .with_m1m3_lut(0.1, 0.0, 0)
+        .with_m1m3_lut(zen, 0.0, 0)
     )
 
     telescope = builder.build()
@@ -56,26 +58,26 @@ def test_builder():
     builder2 = batoid_rubin.LSSTBuilder(fiducial)
     builder2 = (
         builder2
-        .with_m1m3_gravity(0.1)
+        .with_m1m3_gravity(zen)
         .with_m1m3_temperature(0.0, 0.1, -0.1, 0.1, 0.1)
-        .with_m2_gravity(0.1)
+        .with_m2_gravity(zen)
         .with_m2_temperature(0.1, 0.1)
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
-        .with_m1m3_lut(0.1, 0.0, 0)
+        .with_m1m3_lut(zen, 0.0, 0)
     )
     telescope2 = builder2.build()
     assert telescope == telescope2
 
-    # Check galsim.Angle interface too.
+    # Check float interface too.
     builder3 = batoid_rubin.LSSTBuilder(fiducial)
     builder3 = (
         builder3
-        .with_m1m3_gravity(0.1*galsim.radians)
+        .with_m1m3_gravity(zen.rad)
         .with_m1m3_temperature(0.0, 0.1, -0.1, 0.1, 0.1)
-        .with_m2_gravity(0.1*galsim.radians)
+        .with_m2_gravity(zen.rad)
         .with_m2_temperature(0.1, 0.1)
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
-        .with_m1m3_lut(0.1*galsim.radians, 0.0, 0)
+        .with_m1m3_lut(zen.rad, 0.0, 0)
     )
     telescope3 = builder3.build()
     assert telescope == telescope3
