@@ -1,0 +1,8 @@
+numpy
+matplotlib
+ipympl
+ipywidgets
+jupyter_contrib_nbextensions
+galsim
+danish>=0.2.0
+batoid>=0.4.2
