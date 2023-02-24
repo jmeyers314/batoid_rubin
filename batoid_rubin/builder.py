@@ -733,7 +733,8 @@ class LSSTBuilder:
             components.append(
                 batoid.Bicubic(
                     *m1m3_grid_xy(self.bend_dir)[0],
-                    *m1_grid
+                    *m1_grid,
+                    nanpolicy='zero'
                 )
             )
         if components:
@@ -758,7 +759,8 @@ class LSSTBuilder:
             components.append(
                 batoid.Bicubic(
                     *m1m3_grid_xy(self.bend_dir)[1],
-                    *m3_grid
+                    *m3_grid,
+                    nanpolicy='zero'
                 )
             )
         if components:
@@ -825,7 +827,8 @@ class LSSTBuilder:
             components.append(
                 batoid.Bicubic(
                     *m2_grid_xy(self.bend_dir),
-                    *m2_grid
+                    *m2_grid,
+                    nanpolicy='zero'
                 )
             )
         if components:
