@@ -82,12 +82,15 @@ class Raft:
 
 
 class AlignGame:
-    def __init__(self, debug=None, rng=None, nthread=8):
+    def __init__(self, debug=None, control_log=None, rng=None, nthread=8):
         batoid._batoid.set_nthreads(nthread)
 
         if debug is None:
             debug = contextlib.redirect_stdout(None)
         self.debug = debug
+        if control_log is None:
+            control_log = contextlib.redirect_stdout(None)
+        self.control_log = control_log
         if rng is None:
             rng = np.random.default_rng()
         elif isinstance(rng, int):
@@ -316,7 +319,7 @@ class AlignGame:
                 self.cam_Ry,
             )
         )
-        with self.debug:
+        with self.control_log:
             with contextlib.suppress(AttributeError):
                 fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(8, 2))
                 axes[0].plot([x[0] for x in self._control_history], c='k')
@@ -388,7 +391,7 @@ class AlignGame:
         guess = [0.0]*nstar + [0.0]*nstar + [0.5] + [0.0]*len(dz_terms)
         sky_levels = [sky_level]*nstar
 
-        with self.debug:
+        with self.control_log:
             print()
             result = least_squares(
                 fitter.chi, guess, jac=fitter.jac,
@@ -399,7 +402,7 @@ class AlignGame:
 
         dxs_fit, dys_fit, fwhm_fit, dz_fit = fitter.unpack_params(result.x)
 
-        with self.debug:
+        with self.control_log:
             with contextlib.suppress(AttributeError):
                 mods = fitter.model(
                     dxs_fit, dys_fit, fwhm_fit, dz_fit
@@ -452,7 +455,7 @@ class AlignGame:
         return sens
 
     def apply_dof(self, dof):
-        with self.debug:
+        with self.control_log:
             print()
             print("Applying DOF:")
             print(f"M2 dz:  {dof[0]:10.2f} µm")
@@ -546,6 +549,11 @@ class AlignGame:
                 k, thx, thy, nphot=nphot, fiducial=self.fiducial,
                 img=ax.imshow(np.zeros((nx, nx)), vmin=0, vmax=1)
             )
+
+            ax.text(0.02, 0.87, k, transform=ax.transAxes, fontsize=6, color='white')
+
+        # self._axes["in04"].text(0.05, 0.9, "InR04", transform=self._axes["in04"].transAxes, fontsize=6, color='white')
+        # self._axes["ex04"].text(0.05, 0.9, "ExR04", transform=self._axes["ex04"].transAxes, fontsize=6, color='white')
 
         self.wfe_text = fig.text(0.31, 0.89, "WFE", ha="left", va="center", fontsize=16)
         self.win_text = fig.text(0.31, 0.96, "", ha="left", va="center", fontsize=16, color='red')
