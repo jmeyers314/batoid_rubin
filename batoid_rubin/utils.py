@@ -76,3 +76,13 @@ def _fits_cache(datadir, fn):
         Loaded data.
     """
     return fits.getdata(Path(datadir) / fn)
+
+
+def attach_attr(**kwargs):
+    """Decorator for attaching attributes to functions
+    """
+    def inner(f):
+        for k, v in kwargs.items():
+            setattr(f, k, v)
+        return f
+    return inner
