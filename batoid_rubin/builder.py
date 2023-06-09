@@ -11,7 +11,7 @@ import galsim
 import numpy as np
 import yaml
 
-from .utils import _node_to_grid, _fits_cache
+from .utils import _node_to_grid, _fits_cache, attach_attr
 
 
 BendingMode = namedtuple(
@@ -401,6 +401,9 @@ class LSSTBuilder:
 
         self.dof = np.zeros(50)
 
+    @attach_attr(
+        _req_params={"zenith_angle":galsim.Angle}
+    )
     def with_m1m3_gravity(self, zenith_angle):
         """Return new SSTBuilder that includes gravitational flexure of M1M3.
 
@@ -421,6 +424,17 @@ class LSSTBuilder:
         ret.m1m3_zenith_angle = zenith_angle
         return ret
 
+    @attach_attr(
+        _req_params={
+            "m1m3_TBulk":float,
+        },
+        _opt_params={
+            "m1m3_TxGrad":float,
+            "m1m3_TyGrad":float,
+            "m1m3_TzGrad":float,
+            "m1m3_TrGrad":float,
+        }
+    )
     def with_m1m3_temperature(
         self,
         m1m3_TBulk,
@@ -457,6 +471,15 @@ class LSSTBuilder:
         ret.m1m3_TrGrad = m1m3_TrGrad
         return ret
 
+    @attach_attr(
+        _req_params={
+            "zenith_angle":galsim.Angle,
+        },
+        _opt_params={
+            "error":float,
+            "seed":int,
+        }
+    )
     def with_m1m3_lut(self, zenith_angle, error=0.0, seed=1):
         """Return new SSTBuilder that includes LUT perturbations of M1M3.
 
@@ -481,6 +504,9 @@ class LSSTBuilder:
         ret.m1m3_lut_seed=seed
         return ret
 
+    @attach_attr(
+        _req_params={"zenith_angle":galsim.Angle},
+    )
     def with_m2_gravity(self, zenith_angle):
         """Return new SSTBuilder that includes gravitational flexure of M2.
 
@@ -501,6 +527,12 @@ class LSSTBuilder:
         ret.m2_zenith_angle = zenith_angle
         return ret
 
+    @attach_attr(
+        _opt_params={
+            "m2_TzGrad":float,
+            "m2_TrGrad":float,
+        }
+    )
     def with_m2_temperature(
         self,
         m2_TzGrad=0.0,
@@ -525,6 +557,12 @@ class LSSTBuilder:
         ret.m2_TrGrad = m2_TrGrad
         return ret
 
+    @attach_attr(
+        _req_params={
+            "zenith_angle":galsim.Angle,
+            "rotation_angle":galsim.Angle,
+        },
+    )
     def with_camera_gravity(self, zenith_angle, rotation_angle):
         """Return new SSTBuilder that includes gravitational flexure of camera.
 
@@ -550,6 +588,11 @@ class LSSTBuilder:
         ret.camera_rotation_angle = rotation_angle
         return ret
 
+    @attach_attr(
+        _req_params={
+            "camera_TBulk":float,
+        },
+    )
     def with_camera_temperature(self, camera_TBulk):
         """Return new SSTBuilder that includes temperature flexure of camera.
 
@@ -567,6 +610,11 @@ class LSSTBuilder:
         ret.camera_TBulk = camera_TBulk
         return ret
 
+    @attach_attr(
+        _req_params={
+            "dof":list,
+        },
+    )
     def with_aos_dof(self, dof):
         """Return new SSTBuilder that includes specified AOS degrees of freedom
 
@@ -590,6 +638,11 @@ class LSSTBuilder:
         ret.dof = dof
         return ret
 
+    @attach_attr(
+        _req_params={
+            "forces":list,
+        },
+    )
     def with_m1m3_extra_forces(self, forces):
         """Return new SSTBuilder that includes specified M1M3 extra forces
 

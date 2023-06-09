@@ -81,3 +81,8 @@ def test_builder():
     )
     telescope3 = builder3.build()
     assert telescope == telescope3
+
+
+def test_attr():
+    builder = batoid_rubin.LSSTBuilder(batoid.Optic.fromYaml("LSST_r.yaml"))
+    assert hasattr(builder.with_m1m3_gravity, "_req_params")
