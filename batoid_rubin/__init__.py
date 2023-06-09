@@ -1,4 +1,4 @@
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 tmp = __version__
 if "rc" in tmp:  # pragma: no cover
     tmp = tmp[:tmp.find("rc")]

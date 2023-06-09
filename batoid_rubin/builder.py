@@ -72,17 +72,16 @@ def m2_grid_xy(bend_dir):
 
 
 @lru_cache(maxsize=16)
-def m1m3_gravity(fea_dir, optic, zenith_angle):
+def m1m3_gravity(fea_dir, optic, zenith):
     zdata = _fits_cache(fea_dir, "M1M3_dxdydz_zenith.fits.gz")
     hdata = _fits_cache(fea_dir, "M1M3_dxdydz_horizon.fits.gz")
 
-    if zenith_angle is None:
+    if zenith is None:
         return np.zeros_like(zdata[:,2])
-    zenith_angle = zenith_angle.rad
 
     dxyz = (
-        zdata * np.cos(zenith_angle) +
-        hdata * np.sin(zenith_angle)
+        zdata * np.cos(zenith) +
+        hdata * np.sin(zenith)
     )
     dz = dxyz[:,2]
 
@@ -134,15 +133,14 @@ def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
 
 
 @lru_cache(maxsize=16)
-def m1m3_lut(fea_dir, zenith_angle, error, seed):
-    if zenith_angle is None:
+def m1m3_lut(fea_dir, zenith, error, seed):
+    if zenith is None:
         return np.zeros(256)
-    zenith_angle = zenith_angle.rad
 
     from scipy.interpolate import interp1d
     data = _fits_cache(fea_dir, "M1M3_LUT.fits.gz")
 
-    LUT_force = interp1d(data[0], data[1:])(np.rad2deg(zenith_angle))
+    LUT_force = interp1d(data[0], data[1:])(zenith.deg)
 
     if error != 0.0:
         # Get current forces so we can rebalance after applying random error
@@ -162,8 +160,8 @@ def m1m3_lut(fea_dir, zenith_angle, error, seed):
 
     zf = _fits_cache(fea_dir, "M1M3_force_zenith.fits.gz")
     hf = _fits_cache(fea_dir, "M1M3_force_horizon.fits.gz")
-    u0 = zf * np.cos(zenith_angle)
-    u0 += hf * np.sin(zenith_angle)
+    u0 = zf * np.cos(zenith)
+    u0 += hf * np.sin(zenith)
 
     out = LUT_force - u0
     out.flags.writeable = False
@@ -229,16 +227,15 @@ def realize_bend(bend_dir, dof, i):
 
 
 @lru_cache(maxsize=16)
-def m2_gravity(fea_dir, zenith_angle):
+def m2_gravity(fea_dir, zenith):
     data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
-    if zenith_angle is None:
+    if zenith is None:
         return np.zeros_like(data[0])
-    zenith_angle = zenith_angle.rad
 
     zdz, hdz = data[0:2]
 
-    out = zdz * (np.cos(zenith_angle) - 1)
-    out += hdz * np.sin(zenith_angle)
+    out = zdz * (np.cos(zenith) - 1)
+    out += hdz * np.sin(zenith)
     out *= 1e-6  # micron -> meters
     out.flags.writeable = False
     return out
@@ -257,8 +254,8 @@ def m2_temperature(fea_dir, TzGrad, TrGrad):
 
 
 @lru_cache(maxsize=16)
-def LSSTCam_gravity(fea_dir, zenith_angle, rotation_angle):
-    if zenith_angle is None:
+def LSSTCam_gravity(fea_dir, zenith, rotation):
+    if zenith is None:
         return None
 
     camera_gravity_zk = {}
@@ -272,11 +269,11 @@ def LSSTCam_gravity(fea_dir, zenith_angle, rotation_angle):
     ]
     for tname, bname in cam_data:
         data = _fits_cache(fea_dir, tname+"zer.fits.gz")
-        grav_zk = data[0, 3:] * (np.cos(zenith_angle) - 1)
+        grav_zk = data[0, 3:] * (np.cos(zenith) - 1)
         grav_zk += (
-            data[1, 3:] * np.cos(rotation_angle) +
-            data[2, 3:] * np.sin(rotation_angle)
-        ) * np.sin(zenith_angle)
+            data[1, 3:] * np.cos(rotation) +
+            data[2, 3:] * np.sin(rotation)
+        ) * np.sin(zenith)
 
         # remap Andy -> Noll Zernike indices
         zIdxMapping = [
@@ -380,36 +377,36 @@ class LSSTBuilder:
             raise ValueError("Unsupported optic")
 
         # "Input" variables.
-        self.m1m3_zenith_angle = None
+        self.m1m3_zenith = None
         self.m1m3_TBulk = 0.0
         self.m1m3_TxGrad = 0.0
         self.m1m3_TyGrad = 0.0
         self.m1m3_TzGrad = 0.0
         self.m1m3_TrGrad = 0.0
-        self.m1m3_lut_zenith_angle = None
+        self.m1m3_lut_zenith = None
         self.m1m3_lut_error = 0.0
         self.m1m3_lut_seed = 1
         self.m1m3_extra_forces = np.zeros(256)
 
-        self.m2_zenith_angle = None
+        self.m2_zenith = None
         self.m2_TzGrad = 0.0
         self.m2_TrGrad = 0.0
 
-        self.camera_zenith_angle = None
-        self.camera_rotation_angle = None
+        self.camera_zenith = None
+        self.camera_rotation = None
         self.camera_TBulk = None
 
         self.dof = np.zeros(50)
 
     @attach_attr(
-        _req_params={"zenith_angle":galsim.Angle}
+        _req_params={"zenith":galsim.Angle}
     )
-    def with_m1m3_gravity(self, zenith_angle):
+    def with_m1m3_gravity(self, zenith):
         """Return new SSTBuilder that includes gravitational flexure of M1M3.
 
         Parameters
         ----------
-        zenith_angle : float
+        zenith : float
             Zenith angle in radians
 
         Returns
@@ -417,11 +414,11 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M1M3 gravitation flexure applied.
         """
-        if isinstance(zenith_angle, Real):
-            zenith_angle = zenith_angle * galsim.radians
+        if isinstance(zenith, Real):
+            zenith = zenith * galsim.radians
 
         ret = copy(self)
-        ret.m1m3_zenith_angle = zenith_angle
+        ret.m1m3_zenith = zenith
         return ret
 
     @attach_attr(
@@ -473,19 +470,19 @@ class LSSTBuilder:
 
     @attach_attr(
         _req_params={
-            "zenith_angle":galsim.Angle,
+            "zenith":galsim.Angle,
         },
         _opt_params={
             "error":float,
             "seed":int,
         }
     )
-    def with_m1m3_lut(self, zenith_angle, error=0.0, seed=1):
+    def with_m1m3_lut(self, zenith, error=0.0, seed=1):
         """Return new SSTBuilder that includes LUT perturbations of M1M3.
 
         Parameters
         ----------
-        zenith_angle : float
+        zenith : float
             Zenith angle in radians
         error : float, optional
             Fractional error to apply to LUT forces.
@@ -495,24 +492,24 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M1M3 LUT applied.
         """
-        if isinstance(zenith_angle, Real):
-            zenith_angle = zenith_angle * galsim.radians
+        if isinstance(zenith, Real):
+            zenith = zenith * galsim.radians
 
         ret = copy(self)
-        ret.m1m3_lut_zenith_angle = zenith_angle
+        ret.m1m3_lut_zenith = zenith
         ret.m1m3_lut_error=error
         ret.m1m3_lut_seed=seed
         return ret
 
     @attach_attr(
-        _req_params={"zenith_angle":galsim.Angle},
+        _req_params={"zenith":galsim.Angle},
     )
-    def with_m2_gravity(self, zenith_angle):
+    def with_m2_gravity(self, zenith):
         """Return new SSTBuilder that includes gravitational flexure of M2.
 
         Parameters
         ----------
-        zenith_angle : float
+        zenith : float
             Zenith angle in radians
 
         Returns
@@ -520,11 +517,11 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with M2 gravitation flexure applied.
         """
-        if isinstance(zenith_angle, Real):
-            zenith_angle = zenith_angle * galsim.radians
+        if isinstance(zenith, Real):
+            zenith = zenith * galsim.radians
 
         ret = copy(self)
-        ret.m2_zenith_angle = zenith_angle
+        ret.m2_zenith = zenith
         return ret
 
     @attach_attr(
@@ -559,18 +556,18 @@ class LSSTBuilder:
 
     @attach_attr(
         _req_params={
-            "zenith_angle":galsim.Angle,
-            "rotation_angle":galsim.Angle,
+            "zenith":galsim.Angle,
+            "rotation":galsim.Angle,
         },
     )
-    def with_camera_gravity(self, zenith_angle, rotation_angle):
+    def with_camera_gravity(self, zenith, rotation):
         """Return new SSTBuilder that includes gravitational flexure of camera.
 
         Parameters
         ----------
-        zenith_angle : float
+        zenith : float
             Zenith angle in radians
-        rotation_angle : float
+        rotation : float
             Rotation angle in radians
 
         Returns
@@ -578,14 +575,14 @@ class LSSTBuilder:
         ret : SSTBuilder
             New builder with camera gravitation flexure applied.
         """
-        if isinstance(zenith_angle, Real):
-            zenith_angle = zenith_angle * galsim.radians
-        if isinstance(rotation_angle, Real):
-            rotation_angle = rotation_angle * galsim.radians
+        if isinstance(zenith, Real):
+            zenith = zenith * galsim.radians
+        if isinstance(rotation, Real):
+            rotation = rotation * galsim.radians
 
         ret = copy(self)
-        ret.camera_zenith_angle = zenith_angle
-        ret.camera_rotation_angle = rotation_angle
+        ret.camera_zenith = zenith
+        ret.camera_rotation = rotation
         return ret
 
     @attach_attr(
@@ -706,7 +703,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m1m3_fea = np.array(m1m3_gravity(
-            self.fea_dir, self.fiducial, self.m1m3_zenith_angle
+            self.fea_dir, self.fiducial, self.m1m3_zenith
         ))
         m1m3_fea += m1m3_temperature(
             self.fea_dir,
@@ -719,7 +716,7 @@ class LSSTBuilder:
 
         m1m3_forces = np.array(m1m3_lut(
             self.fea_dir,
-            self.m1m3_lut_zenith_angle,
+            self.m1m3_lut_zenith,
             self.m1m3_lut_error,
             self.m1m3_lut_seed
         ))
@@ -832,7 +829,7 @@ class LSSTBuilder:
         # Collect gravity/temperature perturbations
         # be sure to make a copy here!
         m2_fea = np.array(m2_gravity(
-            self.fea_dir, self.m2_zenith_angle
+            self.fea_dir, self.m2_zenith
         ))
         m2_fea += m2_temperature(
             self.fea_dir,
@@ -841,7 +838,7 @@ class LSSTBuilder:
         )
         # m2_fea += m2_lut(
         #     self.fea_dir,
-        #     self.m2_lut_zenith_angle,
+        #     self.m2_lut_zenith,
         # )
 
         bx, by = m2_fea_nodes(self.fea_dir)
@@ -896,12 +893,12 @@ class LSSTBuilder:
         return optic
 
     def _apply_camera_surface_perturbations(self, optic):
-        if self.camera_zenith_angle is None:
+        if self.camera_zenith is None:
             zen = None
             rot = None
         else:
-            zen = self.camera_zenith_angle.rad
-            rot = self.camera_rotation_angle.rad
+            zen = self.camera_zenith
+            rot = self.camera_rotation
         TBulk = self.camera_TBulk
 
         for tname, bname, radius in [
