@@ -397,6 +397,8 @@ class LSSTBuilder:
         self.camera_TBulk = None
 
         self.dof = np.zeros(50)
+        self.extra_zk = None
+        self.extra_zk_eps = None
 
     @attach_attr(
         _req_params={"zenith":galsim.Angle}
@@ -637,6 +639,33 @@ class LSSTBuilder:
 
     @attach_attr(
         _req_params={
+            "zk":None,
+            "eps":float,
+        },
+    )
+    def with_extra_zk(self, zk, eps):
+        """Return new SSTBuilder that includes specified constant Zernike phase
+        screen at entrance pupil.
+
+        Parameters
+        ----------
+        zk : ndarray
+            Zernike coefficients of phases to add at entrance pupil in meters.
+        eps : float
+            Use annular Zernikes with this fractional obscuration.
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified extra Zernike phases.
+        """
+        ret = copy(self)
+        ret.extra_zk = zk
+        ret.extra_zk_eps = eps
+        return ret
+
+    @attach_attr(
+        _req_params={
             "forces":None,
         },
     )
@@ -660,10 +689,29 @@ class LSSTBuilder:
 
     def build(self):
         optic = self.fiducial
+        optic = self._apply_phase(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_M1M3_surface_perturbations(optic)
         optic = self._apply_M2_surface_perturbations(optic)
         optic = self._apply_camera_surface_perturbations(optic)
+        return optic
+
+    def _apply_phase(self, optic):
+        if self.extra_zk is None:
+            return optic
+        optic = optic.withInsertedOptic(
+            before="M1",
+            item=batoid.OPDScreen(
+                name='Screen',
+                surface=batoid.Plane(),
+                screen=batoid.Zernike(
+                    self.extra_zk,
+                    R_outer=4.18,
+                    R_inner=self.extra_zk_eps*4.18
+                ),
+                coordSys=optic.stopSurface.coordSys,
+            )
+        )
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
