@@ -710,6 +710,7 @@ class LSSTBuilder:
                     R_inner=self.extra_zk_eps*4.18
                 ),
                 coordSys=optic.stopSurface.coordSys,
+                obscuration=optic['M1'].obscuration,
             )
         )
         return optic
