@@ -90,3 +90,38 @@ def test_builder():
 def test_attr():
     builder = batoid_rubin.LSSTBuilder(batoid.Optic.fromYaml("LSST_r.yaml"))
     assert hasattr(builder.with_m1m3_gravity, "_req_params")
+
+
+def test_ep_phase():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    builder = (
+        builder
+        .with_m1m3_gravity(zen)
+        .with_m1m3_temperature(0.0, 0.1, -0.1, 0.1, 0.1)
+        .with_m2_gravity(zen)
+        .with_m2_temperature(0.1, 0.1)
+        .with_aos_dof(np.array([0]*19+[1]+[0]*30))
+        .with_m1m3_lut(zen, 0.0, 0)
+        .with_extra_zk([0]*4+[1e-9], 0.61)
+    )
+    telescope = builder.build()
+    thx = 0.01
+    thy = 0.01
+    wavelength=622e-9
+    zk = batoid.zernike(
+        telescope, thx, thy, wavelength,
+        nx=128, jmax=28, eps=0.61
+    )
+    # Now try to zero-out the wavefront
+
+    builder1 = builder.with_extra_zk(
+        zk*wavelength, 0.61
+    )
+    telescope1 = builder1.build()
+    zk1 = batoid.zernike(
+        telescope1, thx, thy, wavelength,
+        nx=128, jmax=28, eps=0.61
+    )
+
+    np.testing.assert_allclose(zk1[4:], 0.0, atol=2e-3)  # 0.002 waves isn't so bad
