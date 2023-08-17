@@ -1,4 +1,4 @@
-Changes from v0.2 to v0.3
+Changes from v0.3 to v0.4
 =========================
 
 
@@ -8,7 +8,6 @@ API Changes
 
 New Features
 ------------
-- Added with_extra_zk method to LSSTBuilder
 
 
 Performance Improvements
