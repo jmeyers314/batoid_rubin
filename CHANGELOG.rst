@@ -17,4 +17,5 @@ Performance Improvements
 
 Bug Fixes
 ---------
-
+- Fixed bug where ComCam camera perturbations moved entire telescope
+  instead of just the camera.
