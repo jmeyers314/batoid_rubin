@@ -8,11 +8,12 @@ from tqdm import tqdm
 
 
 class Gridder:
-    def __init__(self, x, y, ngrid, R_outer):
+    def __init__(self, x, y, ngrid, R_outer, interp='ct'):
         self.x = x
         self.y = y
         self.ngrid = ngrid
         self.R_outer = R_outer
+        self.interp = interp
 
         self.r = np.hypot(self.x, self.y)
         self.rmin, self.rmax = np.min(self.r), np.max(self.r)
@@ -28,9 +29,19 @@ class Gridder:
         self.rr = np.hypot(self.xx, self.yy)
 
     def grid(self, z):
-        ip = CloughTocher2DInterpolator(
-            self.points, np.hstack([z, np.zeros(200)])
-        )
+        if self.interp == 'ct':
+            ip = CloughTocher2DInterpolator(
+                self.points, np.hstack([z, np.zeros(200)])
+            )
+        else:
+            basis = zernikeBasis(
+                171, self.points[:-200, 0], self.points[:-200, 1],
+                R_outer=self.R_outer
+            )
+            coefs, *_ = np.linalg.lstsq(basis.T, z, rcond=None)
+            ip = Zernike(
+                coefs, R_outer=self.R_outer
+            )
         z_grid = ip(self.xx, self.yy)
         dd = self.dx / 10
         dzdx_grid = (
@@ -90,7 +101,7 @@ def main(args):
     M2_dzdy_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M2_d2zdxy_grid = np.empty((nmode, args.ngrid, args.ngrid))
 
-    m2gridder = Gridder(x, y, args.ngrid, M2_outer)
+    m2gridder = Gridder(x, y, args.ngrid, M2_outer, interp='z')
     for imode in tqdm(range(nmode)):
         m2_result = m2gridder.grid(Udn3norm[:, imode])
         M2_z_grid[imode] = m2_result[0]
