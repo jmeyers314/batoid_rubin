@@ -179,6 +179,95 @@ def main(args):
         M3_dzdy_grid[imode] = m3_result[2]
         M3_d2zdxy_grid[imode] = m3_result[3]
 
+    if args.plot or args.plot_only:
+        do_m1 = args.plot_only is None or args.plot_only == 'M1'
+        do_m3 = args.plot_only is None or args.plot_only == 'M3'
+
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
+
+        def colorbar(mappable):
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            import matplotlib.pyplot as plt
+            last_axes = plt.gca()
+            ax = mappable.axes
+            fig = ax.figure
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            cbar = fig.colorbar(mappable, cax=cax)
+            plt.sca(last_axes)
+            return cbar
+
+        fig, axes = plt.subplots(
+            nrows=4, ncols=5, figsize=(11, 7.5),
+            sharex=True, sharey=True
+        )
+        vmax = 1e0
+        xs = np.linspace(-4.5, 4.5, 1000)
+        xs, ys = np.meshgrid(xs, xs)
+        rs = np.hypot(xs, ys)
+        m1 = rs <= 4.18
+        m1 &= rs >= 2.558
+        m3 = rs <= 2.508
+        m3 &= rs >= 0.55
+        for imode, ax in enumerate(axes.ravel()):
+            grid1 = batoid.Bicubic(
+                m1gridder.x_grid, m1gridder.x_grid,
+                M1_z_grid[imode], M1_dzdx_grid[imode], M1_dzdy_grid[imode], M1_d2zdxy_grid[imode],
+                nanpolicy='zero'
+            )
+            grid3 = batoid.Bicubic(
+                m3gridder.x_grid, m3gridder.x_grid,
+                M3_z_grid[imode], M3_dzdx_grid[imode], M3_dzdy_grid[imode], M3_d2zdxy_grid[imode],
+                nanpolicy='zero'
+            )
+            out = np.full_like(xs, np.nan)
+            if do_m1:
+                out[m1] = grid1.sag(xs[m1], ys[m1])
+            if do_m3:
+                out[m3] = grid3.sag(xs[m3], ys[m3])
+            cbar = colorbar(ax.imshow(
+                out*1e6, vmin=-vmax, vmax=vmax,
+                cmap='seismic', origin='lower',
+                extent=[-4.5, 4.5, -4.5, 4.5],
+            ))
+            if do_m1:
+                ax.scatter(
+                    x1, y1, c=z1[imode]*1e6,
+                    edgecolor='k', lw=0.1,
+                    vmin=-vmax, vmax=vmax, cmap='seismic', s=10
+                )
+            if do_m3:
+                ax.scatter(
+                    x3, y3, c=z3[imode]*1e6,
+                    edgecolor='k', lw=0.1,
+                    vmin=-vmax, vmax=vmax, cmap='seismic', s=10
+                )
+            # ax.set_xlim(-1, 1)
+            # ax.set_ylim(-3.5, -1.5)
+
+            cbar.set_label("microns", fontsize=6)
+            cbar.ax.tick_params(labelsize=6)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            ax.add_patch(
+                Circle((0, 0), 4.18, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.add_patch(
+                Circle((0, 0), 2.558, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.add_patch(
+                Circle((0, 0), 2.508, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.add_patch(
+                Circle((0, 0), 0.55, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.set_title(f"Mode {imode:d}", fontsize=8)
+
+        fig.tight_layout()
+        plt.show()
+
     with open(args.output, 'wb') as f:
         pickle.dump(
             (M1zk, M3zk, M1M3zk,
@@ -236,6 +325,17 @@ if __name__ == "__main__":
         type=int,
         default=204,
         help="Number of grid points to use.  Default: 204"
+    )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Plot the results.  Default: False"
+    )
+    parser.add_argument(
+        "--plot_only",
+        type=str,
+        default=None,
+        help="Plot only M1 or M3 results."
     )
     args = parser.parse_args()
     main(args)
