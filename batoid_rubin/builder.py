@@ -3,7 +3,6 @@ from collections import namedtuple
 from copy import copy
 from functools import lru_cache
 from numbers import Real
-import os
 
 import astropy.io.fits as fits
 import batoid
@@ -120,7 +119,10 @@ def m1m3_gravity(fea_dir, optic, zenith):
 
 @lru_cache(maxsize=16)
 def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
-    tbdz, txdz, tydz, tzdz, trdz = _fits_cache(fea_dir, "M1M3_thermal_FEA.fits.gz")
+    tbdz, txdz, tydz, tzdz, trdz = _fits_cache(
+        fea_dir,
+        "M1M3_thermal_FEA.fits.gz"
+    )
 
     out = TBulk * tbdz
     out += TxGrad * txdz
@@ -184,10 +186,13 @@ def transform_zernike(zernike, R_outer, R_inner):
     return ret
 
 
-def _load_mirror_bend(bend_dir, config):
+def _load_mirror_bend(bend_dir, inds, config):
     zk = fits.getdata(Path(bend_dir) / config['zk']['file'])
     grid = fits.getdata(Path(bend_dir) / config['grid']['file'])
     coords = fits.getdata(Path(bend_dir) / config['grid']['coords'])
+    inds = np.array(inds)
+    zk = zk[inds]
+    grid = grid[:, inds]
     zk.flags.writeable = False
     grid.flags.writeable = False
     coords.flags.writeable = False
@@ -199,18 +204,18 @@ def _load_mirror_bend(bend_dir, config):
 
 
 @lru_cache(maxsize=4)
-def load_bend(bend_dir):
+def load_bend(bend_dir, inds):
     with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
-    m1 = _load_mirror_bend(bend_dir, config['M1'])
-    m2 = _load_mirror_bend(bend_dir, config['M2'])
-    m3 = _load_mirror_bend(bend_dir, config['M3'])
-    return m1, m2, m3
+    m1 = _load_mirror_bend(bend_dir, inds, config['M1'])
+    m2 = _load_mirror_bend(bend_dir, inds, config['M2'])
+    m3 = _load_mirror_bend(bend_dir, inds, config['M3'])
+    return dict(M1=m1, M2=m2, M3=m3)
 
 
 @lru_cache(maxsize=16*3)
-def realize_bend(bend_dir, dof, i):
-    modes = load_bend(bend_dir)[i]
+def realize_bend(bend_dir, dof, inds, mirror):
+    modes = load_bend(bend_dir, inds)[mirror]
     dof = np.array(dof)
     zk = galsim.zernike.Zernike(
         np.tensordot(dof, modes.zk, axes=1),
@@ -329,7 +334,14 @@ def LSSTCam_temperature(fea_dir, TBulk):
 
 
 class LSSTBuilder:
-    def __init__(self, fiducial, fea_dir="fea_legacy", bend_dir="bend_legacy"):
+    def __init__(
+        self,
+        fiducial,
+        fea_dir="fea_legacy",
+        bend_dir="bend_legacy",
+        use_m1m3_modes=None,
+        use_m2_modes=None,
+    ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
         Parameters
@@ -341,6 +353,23 @@ class LSSTBuilder:
             Directory containing the FEA files.
         bend_dir : str
             Directory containing the bending mode files.
+        use_m1m3_modes : list of int, optional
+            List indicating the ordering of the bending modes to use for M1M3.
+            For example, [9, 0, 4] would mean use the 9th, 0th, and 4th modes
+            from the bending mode directory, but map these to the 10th, 11th,
+            and 12th indices of the AOS degrees-of-freedom (The 0th through 9th
+            indices are always reserved for the rigid body degrees of freedom of
+            M2 and the camera).  If None, then use the modes in the order
+            specified in the bending mode directory.
+        use_m2_modes : list of int, optional
+            List indicating the ordering of the bending modes to use for M2.
+            Note that the M2 bending mode indices always come immediately after
+            the M1M3 bending mode indices.  So if use_m1m3_modes is [9, 0, 4]
+            and use_m2_modes is [4, 2], then the 10th, 11th, and 12th AOS
+            degrees of freedom will be the 9th, 0th, and 4th M1M3 bending modes,
+            and the 13th and 14th AOS degrees of freedom will be the 4th and 2nd
+            M2 bending modes.  If None, then use the modes in the order
+            specified in the bending mode directory.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -365,9 +394,25 @@ class LSSTBuilder:
             if not bend_dir.is_dir():
                 raise ValueError("Cannot infer bend_dir.")
 
-
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
+
+        if use_m1m3_modes is None:
+            with open(bend_dir / "bend.yaml") as f:
+                config = yaml.safe_load(f)
+                use_m1m3_modes = config['use_m1m3_modes']
+        self.use_m1m3_modes = use_m1m3_modes
+        self.m1m3_dof_indices = slice(10, 10+len(self.use_m1m3_modes))
+
+        if use_m2_modes is None:
+            with open(bend_dir / "bend.yaml") as f:
+                config = yaml.safe_load(f)
+                use_m2_modes = config['use_m2_modes']
+        self.use_m2_modes = use_m2_modes
+        self.m2_dof_indices = slice(
+            self.m1m3_dof_indices.stop,
+            self.m1m3_dof_indices.stop+len(self.use_m2_modes),
+        )
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -806,13 +851,27 @@ class LSSTBuilder:
             m3_nx = m1m3_grid_xy(self.bend_dir)[1].shape[1]
             m1_grid = np.zeros((4, m1_nx, m1_nx))
             m3_grid = np.zeros((4, m3_nx, m3_nx))
-            m1_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=4.18, R_inner=2.558)
-            m3_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=2.508, R_inner=0.55)
+            m1_zk = galsim.zernike.Zernike(
+                np.zeros(29), R_outer=4.18, R_inner=2.558
+            )
+            m3_zk = galsim.zernike.Zernike(
+                np.zeros(29), R_outer=2.508, R_inner=0.55
+            )
 
         # Fold in M1M3 bending modes
-        if np.any(dof[10:30]):
-            bend1 = realize_bend(self.bend_dir, tuple(dof[10:30]), 0)
-            bend3 = realize_bend(self.bend_dir, tuple(dof[10:30]), 2)
+        if np.any(dof[self.m1m3_dof_indices]):
+            bend1 = realize_bend(
+                self.bend_dir,
+                tuple(dof[self.m1m3_dof_indices]),
+                tuple(self.use_m1m3_modes),
+                "M1"
+            )
+            bend3 = realize_bend(
+                self.bend_dir,
+                tuple(dof[self.m1m3_dof_indices]),
+                tuple(self.use_m1m3_modes),
+                "M3"
+            )
 
             m1_zk += transform_zernike(bend1.zk, R_outer=4.18, R_inner=2.558)
             m3_zk += transform_zernike(bend3.zk, R_outer=2.508, R_inner=0.55)
@@ -906,11 +965,18 @@ class LSSTBuilder:
         else:
             m2_nx = m2_grid_xy(self.bend_dir).shape[1]
             m2_grid = np.zeros((4, m2_nx, m2_nx))
-            m2_zk = galsim.zernike.Zernike(np.zeros(29), R_outer=1.71, R_inner=0.9)
+            m2_zk = galsim.zernike.Zernike(
+                np.zeros(29), R_outer=1.71, R_inner=0.9
+            )
 
         # Fold in M2 bending modes
-        if np.any(dof[30:50]):
-            bend2 = realize_bend(self.bend_dir, tuple(dof[30:50]), 1)
+        if np.any(dof[self.m2_dof_indices]):
+            bend2 = realize_bend(
+                self.bend_dir,
+                tuple(dof[self.m2_dof_indices]),
+                tuple(self.use_m2_modes),
+                "M2"
+            )
             m2_zk += transform_zernike(bend2.zk, R_outer=1.71, R_inner=0.9)
             m2_grid += bend2.grid
 
@@ -973,7 +1039,9 @@ class LSSTBuilder:
                     np.min(data[3:, 2])+0.001,
                     np.max(data[3:, 2])-0.001
                 )
-                fidx = np.interp(TBulk1, data[3:, 2], np.arange(len(data[3:, 2])))+3
+                fidx = np.interp(
+                    TBulk1, data[3:, 2], np.arange(len(data[3:, 2]))
+                )+3
                 idx = int(np.floor(fidx))
                 whi = fidx - idx
                 wlo = 1 - whi
