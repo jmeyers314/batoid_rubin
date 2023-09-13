@@ -8,6 +8,14 @@ import numpy as np
 from scipy.io import loadmat
 
 
+M1_outer = 4.18
+M1_inner = 2.558
+M2_outer = 1.71
+M2_inner = 0.9
+M3_outer = 2.508
+M3_inner = 0.55
+
+
 def main(args):
     indir = os.path.join(
         args.indir,
@@ -48,12 +56,12 @@ def main(args):
     # Optionally subtract PTT modes
     if args.M2ptt > 0:
         zbasis = zernikeBasis(
-            args.M2ptt, x, y, R_inner=0.9, R_outer=1.71
+            args.M2ptt, x, y, R_inner=M2_inner, R_outer=M2_outer
         )
         for imode in range(nmode):
             coefs, *_ = np.linalg.lstsq(zbasis.T, normal_modes[imode], rcond=None)
             normal_modes[imode] -= Zernike(
-                coefs[:4], R_inner=0.9, R_outer=1.71
+                coefs[:4], R_inner=M2_inner, R_outer=M2_outer
             )(x, y)
 
     # Load balanced unit load cases and form pseudo-inverse
