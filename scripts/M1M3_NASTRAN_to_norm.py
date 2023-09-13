@@ -8,6 +8,14 @@ import numpy as np
 from scipy.io import loadmat
 
 
+M1_outer = 4.18
+M1_inner = 2.558
+M2_outer = 1.71
+M2_inner = 0.9
+M3_outer = 2.508
+M3_inner = 0.55
+
+
 def main(args):
     indir = os.path.join(
         args.indir,
@@ -45,22 +53,24 @@ def main(args):
     # Optionally subtract PTT modes
     if args.M1ptt > 0:
         zbasis1 = zernikeBasis(
-            args.M1ptt, x[w1], y[w1], R_inner=2.558, R_outer=4.18
+            args.M1ptt, x[w1], y[w1], R_inner=M1_inner, R_outer=M1_outer
         )
         for imode in range(nmode):
             coefs, *_ = np.linalg.lstsq(zbasis1.T, normal_modes[imode, w1], rcond=None)
-            normal_modes[imode] -= Zernike(
-                coefs[:4], R_inner=2.558, R_outer=4.18
+            m1_correction = Zernike(
+                coefs[:4], R_inner=M1_inner, R_outer=M1_outer
             )(x, y)
+            normal_modes[imode] -= m1_correction
     if args.M3ptt > 0:
         zbasis3 = zernikeBasis(
-            args.M3ptt, x[w3], y[w3], R_inner=0.55, R_outer=2.508
+            args.M3ptt, x[w3], y[w3], R_inner=M3_inner, R_outer=M3_outer
         )
         for imode in range(nmode):
             coefs, *_ = np.linalg.lstsq(zbasis3.T, normal_modes[imode, w3], rcond=None)
-            normal_modes[imode, w3] -= Zernike(
-                coefs[:4], R_inner=0.55, R_outer=2.508
+            m3_correction = Zernike(
+                coefs[:4], R_inner=M3_inner, R_outer=M3_outer
             )(x[w3], y[w3])
+            normal_modes[imode, w3] -= m3_correction
 
     # Load balanced unit load cases and form pseudo-inverse
     files = sorted(
