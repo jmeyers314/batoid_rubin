@@ -1,4 +1,5 @@
 import pickle
+import batoid
 
 from galsim.zernike import zernikeBasis, Zernike
 import numpy as np
@@ -89,25 +90,88 @@ def main(args):
     basis = zernikeBasis(
         args.jmax, x, y, R_inner=M2_inner, R_outer=M2_outer
     )
+    zk_eval2 = np.zeros((nmode, len(x)))
     for imode in tqdm(range(nmode)):
         coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[:, imode], rcond=None)
-        Udn3norm[:, imode] -= Zernike(
+        M2zk[imode] = coefs
+        zk_eval2[imode] = Zernike(
             coefs, R_inner=M2_inner, R_outer=M2_outer
         )(x, y)
-        M2zk[imode] = coefs
 
     M2_z_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M2_dzdx_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M2_dzdy_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M2_d2zdxy_grid = np.empty((nmode, args.ngrid, args.ngrid))
 
+    z2 = Udn3norm.T - zk_eval2
+
     m2gridder = Gridder(x, y, args.ngrid, M2_outer, interp='z')
     for imode in tqdm(range(nmode)):
-        m2_result = m2gridder.grid(Udn3norm[:, imode])
+        m2_result = m2gridder.grid(z2[imode])
         M2_z_grid[imode] = m2_result[0]
         M2_dzdx_grid[imode] = m2_result[1]
         M2_dzdy_grid[imode] = m2_result[2]
         M2_d2zdxy_grid[imode] = m2_result[3]
+
+    if args.plot:
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
+
+        def colorbar(mappable):
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            import matplotlib.pyplot as plt
+            last_axes = plt.gca()
+            ax = mappable.axes
+            fig = ax.figure
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            cbar = fig.colorbar(mappable, cax=cax)
+            plt.sca(last_axes)
+            return cbar
+        fig, axes = plt.subplots(
+            nrows=4, ncols=5, figsize=(11, 7.5),
+            sharex=True, sharey=True
+        )
+        vmax = 1e0
+        xs = np.linspace(-2.0, 2.0, 1000)
+        xs, ys = np.meshgrid(xs, xs)
+        rs = np.hypot(xs, ys)
+        w = rs <= 1.71
+        w &= w > 0.9
+        for imode, ax in enumerate(axes.ravel()):
+            grid = batoid.Bicubic(
+                m2gridder.x_grid, m2gridder.x_grid,
+                M2_z_grid[imode], M2_dzdx_grid[imode], M2_dzdy_grid[imode], M2_d2zdxy_grid[imode],
+                nanpolicy='zero'
+            )
+            out = np.full_like(xs, np.nan)
+            out[w] = grid.sag(xs[w], ys[w])
+            cbar = colorbar(ax.imshow(
+                out*1e6, vmin=-vmax, vmax=vmax,
+                cmap='seismic', origin='lower',
+                extent=[-2, 2, -2, 2],
+            ))
+            ax.scatter(
+                x, y, c=z2[imode]*1e6,
+                edgecolor='k', lw=0.1,
+                vmin=-vmax, vmax=vmax, cmap='seismic', s=10
+            )
+
+            cbar.set_label("microns", fontsize=6)
+            cbar.ax.tick_params(labelsize=6)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            ax.add_patch(
+                Circle((0, 0), 1.71, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.add_patch(
+                Circle((0, 0), 0.9, facecolor='None', edgecolor='black', lw=0.1)
+            )
+            ax.set_title(f"Mode {imode:d}", fontsize=8)
+
+        fig.tight_layout()
+        plt.show()
 
     with open(args.output, 'wb') as f:
         pickle.dump(
@@ -152,6 +216,11 @@ if __name__ == "__main__":
         type=int,
         default=204,
         help="Number of grid points to use.  Default: 204"
+    )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Plot the results.  Default: False"
     )
     args = parser.parse_args()
     main(args)
