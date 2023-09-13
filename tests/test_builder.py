@@ -35,9 +35,10 @@ def test_fea():
 
 def test_load_bend():
     dof = (0,)*20
-    m1_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, 0)
-    m2_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, 1)
-    m3_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, 2)
+    inds = tuple(range(20))
+    m1_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M1")
+    m2_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M2")
+    m3_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M3")
 
 
 def test_builder():
@@ -125,3 +126,63 @@ def test_ep_phase():
     )
 
     np.testing.assert_allclose(zk1[4:], 0.0, atol=2e-3)  # 0.002 waves isn't so bad
+
+
+def test_modes_permutation():
+    """Test that permuting both dof and use_m1m3_modes identically gives same result as no
+    permutation.
+    """
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    builder1 = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+
+    rng = np.random.default_rng(57721)
+    for _ in range(10):
+        p1 = rng.permutation(20)
+        p2 = rng.permutation(20)
+        builder2 = batoid_rubin.builder.LSSTBuilder(
+            fiducial, fea_dir, bend_dir,
+            use_m1m3_modes=p1,
+            use_m2_modes=p2
+        )
+        rigid_dof = np.zeros(10)
+        m1m3_dof = rng.uniform(-1e-6, 1e-6, size=20)
+        m2_dof = rng.uniform(-1e-6, 1e-6, size=20)
+        dof1 = np.concatenate([rigid_dof, m1m3_dof, m2_dof])
+        dof2 = np.concatenate([rigid_dof, m1m3_dof[p1], m2_dof[p2]])
+        scope1 = builder1.with_aos_dof(dof1).build()
+        scope2 = builder2.with_aos_dof(dof2).build()
+
+        trays1 = scope1.trace(rays.copy())
+        trays2 = scope2.trace(rays.copy())
+
+        np.testing.assert_allclose(
+            trays1.r, trays2.r, rtol=0, atol=1e-15
+        )
+        np.testing.assert_allclose(
+            trays1.v, trays2.v, rtol=0, atol=1e-15
+        )
+        np.testing.assert_equal(
+            trays1.vignetted, trays2.vignetted
+        )
+        np.testing.assert_equal(
+            trays1.failed, trays2.failed
+        )
+
+
+if __name__ == "__main__":
+    test_fea_nodes_load()
+    test_grid_xy_load()
+    test_fea()
+    test_load_bend()
+    test_builder()
+    test_attr()
+    test_ep_phase()
+    test_modes_permutation()
