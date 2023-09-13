@@ -1,4 +1,5 @@
 import pickle
+import batoid
 
 from galsim.zernike import zernikeBasis, Zernike
 import numpy as np
@@ -8,11 +9,12 @@ from tqdm import tqdm
 
 
 class Gridder:
-    def __init__(self, x, y, ngrid, R_outer):
+    def __init__(self, x, y, ngrid, R_outer, interp='ct'):
         self.x = x
         self.y = y
         self.ngrid = ngrid
         self.R_outer = R_outer
+        self.interp = interp
 
         self.r = np.hypot(self.x, self.y)
         self.rmin, self.rmax = np.min(self.r), np.max(self.r)
@@ -28,9 +30,19 @@ class Gridder:
         self.rr = np.hypot(self.xx, self.yy)
 
     def grid(self, z):
-        ip = CloughTocher2DInterpolator(
-            self.points, np.hstack([z, np.zeros(200)])
-        )
+        if self.interp == 'ct':
+            ip = CloughTocher2DInterpolator(
+                self.points, np.hstack([z, np.zeros(200)])
+            )
+        else:
+            basis = zernikeBasis(
+                171, self.points[:-200, 0], self.points[:-200, 1],
+                R_outer=self.R_outer
+            )
+            coefs, *_ = np.linalg.lstsq(basis.T, z, rcond=None)
+            ip = Zernike(
+                coefs, R_outer=self.R_outer
+            )
         z_grid = ip(self.xx, self.yy)
         dd = self.dx / 10
         dzdx_grid = (
@@ -76,22 +88,30 @@ def main(args):
         w3 = data['annulus'][:, 0] == 3
         Udn3norm = data['Udn3norm']
         Vdn3norm = data['Vdn3norm']
+    r = np.hypot(x, y)
+    # Points in common between M1 and M3
+    w13 = (r > 2.53) & (r < 2.54)
+    w1 &= ~w13  # Points unique to M1
+
     nnode, nmode = Udn3norm.shape
 
     M1zk = np.zeros((nmode, args.jmax+1))
     M3zk = np.zeros((nmode, args.jmax+1))
     M1M3zk = np.zeros((nmode, args.jmax+1))
 
+    zk_eval1 = np.zeros((nmode, len(x)))
+    zk_eval3 = np.zeros((nmode, len(x)))
     if args.zk_simultaneous:
         basis = zernikeBasis(
             args.jmax, x, y, R_inner=M1_inner, R_outer=M1_outer
         )
         for imode in tqdm(range(nmode)):
             coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[:, imode], rcond=None)
-            Udn3norm[:, imode] -= Zernike(
+            M1M3zk[imode] = coefs
+            zk_eval1[imode] = Zernike(
                 coefs, R_inner=M1_inner, R_outer=M1_outer
             )(x, y)
-            M1M3zk[imode] = coefs
+        zk_eval3[:] = zk_eval1
     else:
         basis1 = zernikeBasis(
             args.jmax, x[w1], y[w1], R_inner=M1_inner, R_outer=M1_outer
@@ -101,15 +121,16 @@ def main(args):
         )
         for imode in tqdm(range(nmode)):
             coefs1, *_ = np.linalg.lstsq(basis1.T, Udn3norm[w1, imode], rcond=None)
-            Udn3norm[w1, imode] -= Zernike(
-                coefs1, R_inner=M1_inner, R_outer=M1_outer
-            )(x[w1], y[w1])
             M1zk[imode] = coefs1
+            zk_eval1[imode] = Zernike(
+                coefs1, R_inner=M1_inner, R_outer=M1_outer
+            )(x, y)
+
             coefs3, *_ = np.linalg.lstsq(basis3.T, Udn3norm[w3, imode], rcond=None)
-            Udn3norm[w3, imode] -= Zernike(
-                coefs3, R_inner=M3_inner, R_outer=M3_outer
-            )(x[w3], y[w3])
             M3zk[imode] = coefs3
+            zk_eval3[imode] = Zernike(
+                coefs3, R_inner=M3_inner, R_outer=M3_outer
+            )(x, y)
 
     M1_z_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M1_dzdx_grid = np.empty((nmode, args.ngrid, args.ngrid))
@@ -121,15 +142,38 @@ def main(args):
     M3_dzdy_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M3_d2zdxy_grid = np.empty((nmode, args.ngrid, args.ngrid))
 
-    m1gridder = Gridder(x[w1], y[w1], args.ngrid, M1_outer)
-    m3gridder = Gridder(x[w3], y[w3], args.ngrid, M3_outer)
+    if args.share_m1m3_interface:
+        telescope = batoid.Optic.fromYaml("LSST_r.yaml")
+        # Use M3 normal instead of M1 normal for shared interface points
+        tmp = np.array(Udn3norm)
+        tmp[w13] *= telescope['M1'].surface.normal(x[w13], y[w13])[:, 2][:, None]
+        tmp[w13] /= telescope['M3'].surface.normal(x[w13], y[w13])[:, 2][:, None]
+        z3 = tmp[w3|w13].T - zk_eval3[:, w3|w13]
+        x3 = x[w3|w13]
+        y3 = y[w3|w13]
+
+        x1 = x[w1|w13]
+        y1 = y[w1|w13]
+        z1 = Udn3norm[w1|w13].T - zk_eval1[:, w1|w13]
+    else:
+        z3 = Udn3norm[w3].T - zk_eval3[:, w3]
+        x3 = x[w3]
+        y3 = y[w3]
+
+        x1 = x[w1]
+        y1 = y[w1]
+        z1 = Udn3norm[w1].T - zk_eval1[:, w1]
+
+    m1gridder = Gridder(x1, y1, args.ngrid, M1_outer, interp='z')
+    m3gridder = Gridder(x3, y3, args.ngrid, M3_outer, interp='z')
     for imode in tqdm(range(nmode)):
-        m1_result = m1gridder.grid(Udn3norm[w1, imode])
+        m1_result = m1gridder.grid(z1[imode])
         M1_z_grid[imode] = m1_result[0]
         M1_dzdx_grid[imode] = m1_result[1]
         M1_dzdy_grid[imode] = m1_result[2]
         M1_d2zdxy_grid[imode] = m1_result[3]
-        m3_result = m3gridder.grid(Udn3norm[w3, imode])
+
+        m3_result = m3gridder.grid(z3[imode])
         M3_z_grid[imode] = m3_result[0]
         M3_dzdx_grid[imode] = m3_result[1]
         M3_dzdy_grid[imode] = m3_result[2]
@@ -175,6 +219,11 @@ if __name__ == "__main__":
         help=
             "Use circular (instead of annular) Zernike decomposition.  "
             "Default: False"
+    )
+    parser.add_argument(
+        "--share_m1m3_interface",
+        action="store_true",
+        help="Share FEA points at interface between M1 and M3 for grid determination."
     )
     parser.add_argument(
         "--jmax",
