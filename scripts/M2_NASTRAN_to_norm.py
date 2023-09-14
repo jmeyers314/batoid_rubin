@@ -1,11 +1,11 @@
-import glob
-import os
+from pathlib import Path
 import pickle
 
 import batoid
 from galsim.zernike import Zernike, zernikeBasis
 import numpy as np
 from scipy.io import loadmat
+from astropy.table import Table
 
 
 M1_outer = 4.18
@@ -17,33 +17,30 @@ M3_inner = 0.55
 
 
 def main(args):
-    indir = os.path.join(
-        args.indir,
-        "1M2Bending"
-    )
+    indir = Path(args.indir) / "1M2Bending"
+
+    actuators = Table(np.genfromtxt(
+        indir / "M2actuatorNodesXY_M2_FEA_CS.txt",
+        names=['id', 'x', 'y']
+    ))
+    actuators['id'] = actuators['id'].astype(int)
+    # M2 FEA CS -> M2 CS; see https://sitcomtn-003.lsst.io/#m2
+    actuators['x'], actuators['y'] = -actuators['y'], -actuators['x']
+    actuators['x'] *= 0.0254  # inches -> meters
+    actuators['y'] *= 0.0254
+
     # Load NASTRAN perturbations
-    data = loadmat(
-        os.path.join(
-            indir,
-            "0unitLoadCases",
-            "T1T2T3.mat"
-        )
-    )['NXYZap']
-
-    nodeID = data[:, 0]
-    x, y, z = data[:, 2:5].T  # Harris node positions on M2 mirror
-    x, y, z = -y, -x, -z  # This is M2 FEA CS -> M2 CS see https://sitcomtn-003.lsst.io/#m2
-
-    # NASTRAN perturbations for each mode
-    # Note M2 FEA CS -> M2 CS here too.
-    fea_modes = np.array([
-        -data[:, 6::3],  # x <= -y
-        -data[:, 5::3],  # y <= -x
-        -data[:, 7::3]   # z <= -z
-    ]).T
-    fea_modes *= 0.0254  # inches -> meters
-    x *= 0.0254
-    y *= 0.0254
+    t1t2t3 = loadmat(indir / "0unitLoadCases" / "T1T2T3.mat")['NXYZap']
+    nodeID = t1t2t3[:, 0]
+    t1t2t3[:, 2:] *= 0.0254 # inches -> meters
+    # M2 FEA CS -> M2 CS here too; x, y, z => -y, -x, -z
+    x = -t1t2t3[:, 3]
+    y = -t1t2t3[:, 2]
+    z = -t1t2t3[:, 4]
+    dx = -t1t2t3[:, 6::3]
+    dy = -t1t2t3[:, 5::3]
+    dz = -t1t2t3[:, 7::3]
+    fea_modes = np.array([dx, dy, dz]).T
     nmode, nnode, _ = fea_modes.shape
 
     # Load telescope so we can project perturbations onto surface normal
@@ -65,35 +62,40 @@ def main(args):
             )(x, y)
 
     # Load balanced unit load cases and form pseudo-inverse
-    files = sorted(
-        glob.glob(
-            os.path.join(
-                indir,
-                "0unitLoadCases",
-                "node*.csv"
-            )
-        )
-    )
-    C = np.empty((nmode, nmode))
-    for i in range(nmode):
-        d = np.genfromtxt(files[i], delimiter=',')
-        C[:, i] = d[:, 1]
+    C = np.full((nmode, nmode), np.nan)
+    for i, actuator in enumerate(actuators):
+        file = indir/"0unitLoadCases"/f"node{actuator['id']}.csv"
+        C[i] = np.genfromtxt(file, delimiter=',')[:, 1]
     s = np.linalg.svd(C)[1]
     Cinv = np.linalg.pinv(C, rcond=s[0]*1e-6)
 
     # Solve for FEA modes
-    u, s, vh = np.linalg.svd(Cinv.T@normal_modes, full_matrices=False)
+    u, s, vh = np.linalg.svd(Cinv@normal_modes, full_matrices=False)
 
     # Normalize to 1um surface normal deviation
-    Udn3norm = np.empty((nnode, nmode))
-    Vdn3norm = np.empty((nmode, nmode))
+    Udn3norm = np.empty((nnode, nmode))  # surface deviations
+    Vdn3norm = np.empty((nmode, nmode))  # actuator forces
+    coef = np.empty((nmode, nmode))  # coefs of unit load force or deviation vectors
     for imode in range(nmode):
         factor = 1e-6/np.std(vh[imode])
         Udn3norm[:, imode] = vh[imode] * factor
         Vdn3norm[:, imode] = u[:, imode] * factor / s[imode]
+        coef[:, imode] = Cinv@Vdn3norm[:, imode]
+
+        if imode < 30:  # mostly care about first ~30 modes
+            np.testing.assert_allclose(
+                coef[:, imode]@normal_modes, Udn3norm[:, imode],
+                atol=1e-9, rtol=0.0
+            )
+
+            np.testing.assert_allclose(
+                coef[:, imode]@C, Vdn3norm[:, imode],
+                atol=1e-3, rtol=1e-3
+            )
+
     # Note: there are arbitrary minus signs here we don't track.
     with open(args.output, 'wb') as f:
-        pickle.dump((x, y, Udn3norm, Vdn3norm), f)
+        pickle.dump((x, y, Udn3norm, Vdn3norm, coef), f)
 
 
 if __name__ == "__main__":

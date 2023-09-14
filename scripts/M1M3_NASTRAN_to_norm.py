@@ -1,11 +1,11 @@
-import glob
-import os
+from pathlib import Path
 import pickle
 
 import batoid
 from galsim.zernike import Zernike, zernikeBasis
 import numpy as np
 from scipy.io import loadmat
+from astropy.table import Table
 
 
 M1_outer = 4.18
@@ -17,36 +17,46 @@ M3_inner = 0.55
 
 
 def main(args):
-    indir = os.path.join(
-        args.indir,
-        "0M1M3Bending"
-    )
-    # Load NASTRAN perturbations
-    data = loadmat(
-        os.path.join(
-            indir,
-            "0unitLoadCases",
-            "T1T2T3.mat"
-        )
-    )['NXYZap']
+    indir = Path(args.indir) / "0M1M3Bending"
+    # Load actuator data
+    actuators = Table(np.genfromtxt(
+        indir / "ForceActuatorTable.csv",
+        names=True,
+        delimiter=',',
+        defaultfmt="d,d,f,f,f,f,f,f,f",
+        usecols=range(5)
+    ))
+    actuators['Index'] = actuators['Index'].astype(int)
+    actuators['ID'] = actuators['ID'].astype(int)
 
-    nodeID = data[:, 0]
-    x, y, z = data[:, 2:5].T  # Original node positions on M1M3 mirror
-    # NASTRAN perturbations for each mode
-    fea_modes = np.array([
-        data[:, 5::3],
-        data[:, 6::3],
-        data[:, 7::3]
-    ]).T
+    # Load NASTRAN perturbations
+    t1t2t3 = loadmat(indir / "0unitLoadCases" / "T1T2T3.mat")['NXYZap']
+    nodeID = t1t2t3[:, 0]
+    x, y, z = t1t2t3[:, 2:5].T  # Original node positions on M1M3 mirror
+    dx = t1t2t3[:, 5::3]
+    dy = t1t2t3[:, 6::3]
+    dz = t1t2t3[:, 7::3]
+    fea_modes = np.array([dx, dy, dz]).T
     w1 = nodeID < 800000
     w3 = nodeID >= 800000
     nmode, nnode, _ = fea_modes.shape
+
+    # Load unit load forces
+    C = np.full((nmode, nmode), np.nan)
+    for actuator in actuators:
+        file = indir/"0unitLoadCases"/f"node500{actuator['ID']}.csv"
+        C[actuator['Index']] = np.genfromtxt(file, delimiter=',')[:, 1]
+
+    # Compute pseudo-inverse for later
+    s = np.linalg.svd(C)[1]
+    Cinv = np.linalg.pinv(C, rcond=s[0]*1e-6)
 
     # Load telescope so we can project perturbations onto surface normal
     telescope = batoid.Optic.fromYaml("LSST_r.yaml")
     normal_vectors = np.empty((nnode, 3))
     normal_vectors[w1] = telescope['M1'].surface.normal(x[w1], y[w1])
     normal_vectors[w3] = telescope['M3'].surface.normal(x[w3], y[w3])
+
     # Do the projection
     normal_modes = np.einsum("abc,bc->ab", fea_modes, normal_vectors)
 
@@ -72,39 +82,35 @@ def main(args):
             )(x[w3], y[w3])
             normal_modes[imode, w3] -= m3_correction
 
-    # Load balanced unit load cases and form pseudo-inverse
-    files = sorted(
-        glob.glob(
-            os.path.join(
-                indir,
-                "0unitLoadCases",
-                "node*.csv"
-            )
-        )
-    )
-    C = np.empty((nmode, nmode))
-    for i in range(nmode):
-        d = np.genfromtxt(files[i], delimiter=',')
-        C[:, i] = d[:, 1]
-    s = np.linalg.svd(C)[1]
-    Cinv = np.linalg.pinv(C, rcond=s[0]*1e-6)
-
     # Solve for FEA modes
-    u, s, vh = np.linalg.svd(Cinv.T@normal_modes, full_matrices=False)
+    u, s, vh = np.linalg.svd(Cinv@normal_modes, full_matrices=False)
 
     # Normalize to 1um RMS surface deviation.
-    Udn3norm = np.empty((nnode, nmode))
-    Vdn3norm = np.empty((nmode, nmode))
+    Udn3norm = np.empty((nnode, nmode))  # surface deviations
+    Vdn3norm = np.empty((nmode, nmode))  # actuator forces
+    coef = np.empty((nmode, nmode))  # coefs of unit load force or deviation vectors
     for imode in range(nmode):
         factor = 1e-6/np.std(vh[imode])
         Udn3norm[:, imode] = vh[imode] * factor
         Vdn3norm[:, imode] = u[:, imode] * factor / s[imode]
+        coef[:, imode] = Cinv@Vdn3norm[:, imode]
+
+        if imode < 30:  # mostly care about first ~30 modes
+            np.testing.assert_allclose(
+                coef[:, imode]@normal_modes, Udn3norm[:, imode],
+                atol=2e-10, rtol=0.0
+            )
+
+            np.testing.assert_allclose(
+                coef[:, imode]@C, Vdn3norm[:, imode],
+                atol=1e-3, rtol=1e-3
+            )
 
     # Note: there are arbitrary minus signs here we don't track.
-    # We might also have some position swaps when switching PTT off and on.
+    # We might also have some mode ordering swaps when switching PTT off and on.
     # These all appear to be in the batoid coordinate system here.
     with open(args.output, 'wb') as f:
-        pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm), f)
+        pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm, coef), f)
 
 
 if __name__ == "__main__":
