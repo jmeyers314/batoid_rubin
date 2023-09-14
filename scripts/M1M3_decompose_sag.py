@@ -1,4 +1,4 @@
-import pickle
+import asdf
 import batoid
 
 from galsim.zernike import zernikeBasis, Zernike
@@ -77,42 +77,58 @@ def main(args):
         M1_inner = 2.558
         M3_inner = 0.55
 
-    if args.input.endswith('.pkl'):
-        with open(args.input, 'rb') as f:
-            x, y, w1, w3, Udn3norm, Vdn3norm = pickle.load(f)
+    if args.input.endswith('.asdf'):
+        with asdf.open(args.input) as af:
+            x = np.array(af['fea_nodes']['X_Position'].data)
+            y = np.array(af['fea_nodes']['Y_Position'].data)
+            w1 = np.array(af['M1_nodes'])
+            w3 = np.array(af['M3_nodes'])
+            Udn3norm = np.array(af['bend_1um']['sag'])
+            Vdn3norm = np.array(af['bend_1um']['force'])
     elif args.input.endswith('.mat'):
         data = loadmat(args.input)
         x = data['x'][:, 0]
         y = data['y'][:, 0]
         w1 = data['annulus'][:, 0] == 1
         w3 = data['annulus'][:, 0] == 3
-        Udn3norm = data['Udn3sag']
-        Vdn3norm = data['Vdn3norm']
+        Udn3norm = data['Udn3norm'].T
+        Vdn3norm = data['Vdn3norm'].T
+
     r = np.hypot(x, y)
     # Points in common between M1 and M3
     w13 = (r > 2.53) & (r < 2.54)
     w1 &= ~w13  # Points unique to M1
 
-    nnode, nmode = Udn3norm.shape
+    nmode, nnode = Udn3norm.shape
 
     M1zk = np.zeros((nmode, args.jmax+1))
     M3zk = np.zeros((nmode, args.jmax+1))
-    M1M3zk = np.zeros((nmode, args.jmax+1))
 
     zk_eval1 = np.zeros((nmode, len(x)))
     zk_eval3 = np.zeros((nmode, len(x)))
     if args.zk_simultaneous:
+        M1zk_R_inner = M3_inner
+        M1zk_R_outer = M1_outer
+        M3zk_R_inner = M3_inner
+        M3zk_R_outer = M1_outer
         basis = zernikeBasis(
-            args.jmax, x, y, R_inner=M1_inner, R_outer=M1_outer
+            args.jmax, x, y,
+            R_inner=M1_inner,  # Just use M1 even though simultaneous
+            R_outer=M1_outer
         )
         for imode in tqdm(range(nmode)):
-            coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[:, imode], rcond=None)
-            M1M3zk[imode] = coefs
+            coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[imode], rcond=None)
+            M1zk[imode] = coefs
+            M3zk[imode] = coefs
             zk_eval1[imode] = Zernike(
                 coefs, R_inner=M1_inner, R_outer=M1_outer
             )(x, y)
-        zk_eval3[:] = zk_eval1
+        zk_eval3[:] = zk_eval1  # M1 and M3 are the same in this case
     else:
+        M1zk_R_inner = M1_inner
+        M1zk_R_outer = M1_outer
+        M3zk_R_inner = M3_inner
+        M3zk_R_outer = M3_outer
         basis1 = zernikeBasis(
             args.jmax, x[w1], y[w1], R_inner=M1_inner, R_outer=M1_outer
         )
@@ -120,13 +136,13 @@ def main(args):
             args.jmax, x[w3], y[w3], R_inner=M3_inner, R_outer=M3_outer
         )
         for imode in tqdm(range(nmode)):
-            coefs1, *_ = np.linalg.lstsq(basis1.T, Udn3norm[w1, imode], rcond=None)
+            coefs1, *_ = np.linalg.lstsq(basis1.T, Udn3norm[imode, w1], rcond=None)
             M1zk[imode] = coefs1
             zk_eval1[imode] = Zernike(
                 coefs1, R_inner=M1_inner, R_outer=M1_outer
             )(x, y)
 
-            coefs3, *_ = np.linalg.lstsq(basis3.T, Udn3norm[w3, imode], rcond=None)
+            coefs3, *_ = np.linalg.lstsq(basis3.T, Udn3norm[imode, w3], rcond=None)
             M3zk[imode] = coefs3
             zk_eval3[imode] = Zernike(
                 coefs3, R_inner=M3_inner, R_outer=M3_outer
@@ -146,23 +162,23 @@ def main(args):
         telescope = batoid.Optic.fromYaml("LSST_r.yaml")
         # Use M3 normal instead of M1 normal for shared interface points
         tmp = np.array(Udn3norm)
-        tmp[w13] *= telescope['M1'].surface.normal(x[w13], y[w13])[:, 2][:, None]
-        tmp[w13] /= telescope['M3'].surface.normal(x[w13], y[w13])[:, 2][:, None]
-        z3 = tmp[w3|w13].T - zk_eval3[:, w3|w13]
+        tmp[:, w13] *= telescope['M1'].surface.normal(x[w13], y[w13])[:, 2]
+        tmp[:, w13] /= telescope['M3'].surface.normal(x[w13], y[w13])[:, 2]
+        z3 = tmp[:, w3|w13] - zk_eval3[:, w3|w13]
         x3 = x[w3|w13]
         y3 = y[w3|w13]
 
         x1 = x[w1|w13]
         y1 = y[w1|w13]
-        z1 = Udn3norm[w1|w13].T - zk_eval1[:, w1|w13]
+        z1 = Udn3norm[:, w1|w13] - zk_eval1[:, w1|w13]
     else:
-        z3 = Udn3norm[w3].T - zk_eval3[:, w3]
+        z3 = Udn3norm[:, w3] - zk_eval3[:, w3]
         x3 = x[w3]
         y3 = y[w3]
 
         x1 = x[w1]
         y1 = y[w1]
-        z1 = Udn3norm[w1].T - zk_eval1[:, w1]
+        z1 = Udn3norm[:, w1] - zk_eval1[:, w1]
 
     m1gridder = Gridder(x1, y1, args.ngrid, M1_outer, interp='z')
     m3gridder = Gridder(x3, y3, args.ngrid, M3_outer, interp='z')
@@ -268,13 +284,39 @@ def main(args):
         fig.tight_layout()
         plt.show()
 
-    with open(args.output, 'wb') as f:
-        pickle.dump(
-            (M1zk, M3zk, M1M3zk,
-             m1gridder.x_grid, M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
-             m3gridder.x_grid, M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid),
-            f
-        )
+    tree = dict(
+        M1=dict(
+            grid=dict(
+                x=m1gridder.x_grid,
+                z=M1_z_grid,
+                dzdx=M1_dzdx_grid,
+                dzdy=M1_dzdy_grid,
+                d2zdxy=M1_d2zdxy_grid,
+            ),
+            zk = dict(
+                coefs=M1zk,
+                R_inner=M1zk_R_inner,
+                R_outer=M1zk_R_outer,
+            )
+        ),
+        M3=dict(
+            grid=dict(
+                x=m3gridder.x_grid,
+                z=M3_z_grid,
+                dzdx=M3_dzdx_grid,
+                dzdy=M3_dzdy_grid,
+                d2zdxy=M3_d2zdxy_grid,
+            ),
+            zk = dict(
+                coefs=M3zk,
+                R_inner=M3zk_R_inner,
+                R_outer=M3zk_R_outer,
+            )
+        ),
+        args = vars(args)
+    )
+
+    asdf.AsdfFile(tree).write_to(args.output)
 
 
 if __name__ == "__main__":
@@ -283,15 +325,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input",
         type=str,
-        default="M1M3_sag.pkl",
-        help="Input pickle or mat file.  Default: M1M3_sag.pkl"
+        default="M1M3_NASTRAN.asdf",
+        help="Input asdf or mat file.  Default: M1M3_NASTRAN.asdf"
     )
     parser.add_argument(
         "output",
-        default="M1M3_decomposition.pkl",
+        default="M1M3_decomposition.asdf",
         help=
             "output file name  "
-            "Default: M1M3_decomposition.pkl",
+            "Default: M1M3_decomposition.asdf",
         nargs='?'
     )
     parser.add_argument(

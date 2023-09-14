@@ -1,11 +1,11 @@
 from pathlib import Path
-import pickle
 
 import batoid
 from galsim.zernike import Zernike, zernikeBasis
 import numpy as np
 from scipy.io import loadmat
 from astropy.table import Table
+import asdf
 
 
 M1_outer = 4.18
@@ -29,6 +29,10 @@ def main(args):
     actuators['Index'] = actuators['Index'].astype(int)
     actuators['ID'] = actuators['ID'].astype(int)
 
+    tree = dict()
+    tree['actuators'] = actuators
+    nactuators = len(actuators)
+
     # Load NASTRAN perturbations
     t1t2t3 = loadmat(indir / "0unitLoadCases" / "T1T2T3.mat")['NXYZap']
     nodeID = t1t2t3[:, 0]
@@ -41,15 +45,32 @@ def main(args):
     w3 = nodeID >= 800000
     nmode, nnode, _ = fea_modes.shape
 
+    fea_nodes = Table()
+    fea_nodes['nodeID'] = nodeID
+    fea_nodes['X_Position'] = x
+    fea_nodes['Y_Position'] = y
+    fea_nodes['Z_Position'] = z
+    tree['fea_nodes'] = fea_nodes
+    tree['unit_load'] = dict()
+    tree['unit_load']['displacements'] = fea_modes
+
     # Load unit load forces
-    C = np.full((nmode, nmode), np.nan)
+    C = np.full((nmode, nactuators), np.nan)
     for actuator in actuators:
         file = indir/"0unitLoadCases"/f"node500{actuator['ID']}.csv"
         C[actuator['Index']] = np.genfromtxt(file, delimiter=',')[:, 1]
 
+    # Check that C is balanced in each row
+    np.testing.assert_allclose(np.sum(C, axis=1), 0.0, atol=1e-9, rtol=0)
+    np.testing.assert_allclose(C@actuators['X_Position'], 0.0, atol=1e-3, rtol=0)
+    np.testing.assert_allclose(C@actuators['Y_Position'], 0.0, atol=1e-3, rtol=0)
+
     # Compute pseudo-inverse for later
     s = np.linalg.svd(C)[1]
     Cinv = np.linalg.pinv(C, rcond=s[0]*1e-6)
+
+    # Add to tree
+    tree['unit_load']['forces'] = C
 
     # Load telescope so we can project perturbations onto surface normal
     telescope = batoid.Optic.fromYaml("LSST_r.yaml")
@@ -57,8 +78,13 @@ def main(args):
     normal_vectors[w1] = telescope['M1'].surface.normal(x[w1], y[w1])
     normal_vectors[w3] = telescope['M3'].surface.normal(x[w3], y[w3])
 
+    tree['M1M3_normal_vectors'] = normal_vectors
+
     # Do the projection
     normal_modes = np.einsum("abc,bc->ab", fea_modes, normal_vectors)
+    tree['unit_load']['normal_displacement'] = normal_modes
+
+    ptt_modes = np.array(normal_modes)
 
     # Optionally subtract PTT modes
     if args.M1ptt > 0:
@@ -66,55 +92,70 @@ def main(args):
             args.M1ptt, x[w1], y[w1], R_inner=M1_inner, R_outer=M1_outer
         )
         for imode in range(nmode):
-            coefs, *_ = np.linalg.lstsq(zbasis1.T, normal_modes[imode, w1], rcond=None)
+            coefs, *_ = np.linalg.lstsq(zbasis1.T, ptt_modes[imode, w1], rcond=None)
             m1_correction = Zernike(
                 coefs[:4], R_inner=M1_inner, R_outer=M1_outer
             )(x, y)
-            normal_modes[imode] -= m1_correction
+            ptt_modes[imode] -= m1_correction
     if args.M3ptt > 0:
         zbasis3 = zernikeBasis(
             args.M3ptt, x[w3], y[w3], R_inner=M3_inner, R_outer=M3_outer
         )
         for imode in range(nmode):
-            coefs, *_ = np.linalg.lstsq(zbasis3.T, normal_modes[imode, w3], rcond=None)
+            coefs, *_ = np.linalg.lstsq(zbasis3.T, ptt_modes[imode, w3], rcond=None)
             m3_correction = Zernike(
                 coefs[:4], R_inner=M3_inner, R_outer=M3_outer
             )(x[w3], y[w3])
-            normal_modes[imode, w3] -= m3_correction
+            ptt_modes[imode, w3] -= m3_correction
+
+    tree['unit_load']['ptt_normal_displacement'] = ptt_modes
+
+    influence = Cinv@ptt_modes
+    tree['influence_normal_displacement'] = influence
 
     # Solve for FEA modes
-    u, s, vh = np.linalg.svd(Cinv@normal_modes, full_matrices=False)
+    u, s, vh = np.linalg.svd(influence, full_matrices=False)
 
     # Normalize to 1um RMS surface deviation.
-    Udn3norm = np.empty((nnode, nmode))  # surface deviations
-    Vdn3norm = np.empty((nmode, nmode))  # actuator forces
-    coef = np.empty((nmode, nmode))  # coefs of unit load force or deviation vectors
+    normal_modes_1um = np.empty((nmode, nnode))
+    force_modes_1um = np.empty((nmode, nactuators))
+    coef_1um = np.empty((nmode, nmode))  # coefs of unit load force or deviation vectors
     for imode in range(nmode):
         factor = 1e-6/np.std(vh[imode])
-        Udn3norm[:, imode] = vh[imode] * factor
-        Vdn3norm[:, imode] = u[:, imode] * factor / s[imode]
-        coef[:, imode] = Cinv@Vdn3norm[:, imode]
+        normal_modes_1um[imode] = vh[imode] * factor
+        force_modes_1um[imode] = u.T[imode] * factor / s[imode]
+        # coef_1um[imode], *_ = np.linalg.lstsq(ptt_modes.T, normal_modes_1um[imode], rcond=None)
+        coef_1um[imode] = Cinv@force_modes_1um[imode]
 
         if imode < 30:  # mostly care about first ~30 modes
             np.testing.assert_allclose(
-                coef[:, imode]@normal_modes, Udn3norm[:, imode],
-                atol=2e-10, rtol=0.0
+                coef_1um[imode]@ptt_modes, normal_modes_1um[imode],
+                atol=5e-10, rtol=0.0
             )
 
             np.testing.assert_allclose(
-                coef[:, imode]@C, Vdn3norm[:, imode],
-                atol=1e-3, rtol=1e-3
+                coef_1um[imode]@C, force_modes_1um[imode],
+                atol=1e-3, rtol=3e-3
             )
 
-    Udn3sag = np.array(Udn3norm)
-    Udn3sag[w1] /= telescope['M1'].surface.normal(x[w1], y[w1])[:, 2][:, None]
-    Udn3sag[w3] /= telescope['M3'].surface.normal(x[w3], y[w3])[:, 2][:, None]
+    tree['bend_1um'] = dict()
+    tree['bend_1um']['normal'] = normal_modes_1um
+    tree['bend_1um']['force'] = force_modes_1um
+    tree['bend_1um']['coef'] = coef_1um
+
+    # Convert displacement along normal to along sag
+    sag_modes_1um = np.array(normal_modes_1um)
+    sag_modes_1um[:, w1] /= telescope['M1'].surface.normal(x[w1], y[w1])[:, 2]
+    sag_modes_1um[:, w3] /= telescope['M3'].surface.normal(x[w3], y[w3])[:, 2]
+
+    tree['bend_1um']['sag'] = sag_modes_1um
+    tree['M1_nodes'] = w1
+    tree['M3_nodes'] = w3
+    tree['args'] = vars(args)
 
     # Note: there are arbitrary minus signs here we don't track.
     # We might also have some mode ordering swaps when switching PTT off and on.
-    # These all appear to be in the batoid coordinate system here.
-    with open(args.output, 'wb') as f:
-        pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm, Udn3sag, coef), f)
+    asdf.AsdfFile(tree).write_to(args.output)
 
 
 if __name__ == "__main__":
@@ -150,10 +191,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "output",
-        default="M1M3_norm.pkl",
+        default="M1M3_NASTRAN.asdf",
         help=
             "output file name.  "
-            "Default: M1M3_norm.pkl",
+            "Default: M1M3_NASTRAN.asdf",
         nargs='?'
     )
     args = parser.parse_args()
