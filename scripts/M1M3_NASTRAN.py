@@ -106,11 +106,15 @@ def main(args):
                 atol=1e-3, rtol=1e-3
             )
 
+    Udn3sag = np.array(Udn3norm)
+    Udn3sag[w1] /= telescope['M1'].surface.normal(x[w1], y[w1])[:, 2][:, None]
+    Udn3sag[w3] /= telescope['M3'].surface.normal(x[w3], y[w3])[:, 2][:, None]
+
     # Note: there are arbitrary minus signs here we don't track.
     # We might also have some mode ordering swaps when switching PTT off and on.
     # These all appear to be in the batoid coordinate system here.
     with open(args.output, 'wb') as f:
-        pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm, coef), f)
+        pickle.dump((x, y, w1, w3, Udn3norm, Vdn3norm, Udn3sag, coef), f)
 
 
 if __name__ == "__main__":

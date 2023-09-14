@@ -93,9 +93,12 @@ def main(args):
                 atol=1e-3, rtol=1e-3
             )
 
+    Udn3sag = np.array(Udn3norm)
+    Udn3sag /= telescope['M2'].surface.normal(x, y)[:, 2][:, None]
+
     # Note: there are arbitrary minus signs here we don't track.
     with open(args.output, 'wb') as f:
-        pickle.dump((x, y, Udn3norm, Vdn3norm, coef), f)
+        pickle.dump((x, y, Udn3norm, Vdn3norm, Udn3sag, coef), f)
 
 
 if __name__ == "__main__":

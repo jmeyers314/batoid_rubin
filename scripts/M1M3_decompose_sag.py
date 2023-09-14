@@ -86,7 +86,7 @@ def main(args):
         y = data['y'][:, 0]
         w1 = data['annulus'][:, 0] == 1
         w3 = data['annulus'][:, 0] == 3
-        Udn3norm = data['Udn3norm']
+        Udn3norm = data['Udn3sag']
         Vdn3norm = data['Vdn3norm']
     r = np.hypot(x, y)
     # Points in common between M1 and M3
