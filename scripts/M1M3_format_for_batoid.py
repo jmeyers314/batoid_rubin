@@ -10,7 +10,6 @@ def main(args):
     Path(args.outdir).mkdir(parents=True, exist_ok=True)
 
     # Read in asdf, copy to dict
-    data = dict()
     with asdf.open(args.input) as af:
         M1 = dict(grid=dict(), zk=dict())
         M3 = dict(grid=dict(), zk=dict())
