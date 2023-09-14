@@ -3,97 +3,71 @@ from pathlib import Path
 
 import astropy.io.fits as fits
 import numpy as np
-import pickle
+import asdf
+
 
 def main(args):
     Path(args.outdir).mkdir(parents=True, exist_ok=True)
 
-    with open(args.input, 'rb') as f:
-        (M1zk, M3zk, M1M3zk,
-         M1_x_grid, M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
-         M3_x_grid, M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
-        ) = pickle.load(f)
-
-    if tstart:=eval(args.swap):
-        # swap first half for second half
-        tend = np.roll(tstart, len(tstart)//2)
-        for arr in (
-            M1zk, M3zk, M1M3zk,
-            M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid,
-            M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid
+    # Read in asdf, copy to dict
+    data = dict()
+    with asdf.open(args.input) as af:
+        M1 = dict(grid=dict(), zk=dict())
+        M3 = dict(grid=dict(), zk=dict())
+        for k1, k2 in (
+            ('grid', 'x'),
+            ('grid', 'z'),
+            ('grid', 'dzdx'),
+            ('grid', 'dzdy'),
+            ('grid', 'd2zdxy'),
+            ('zk', 'coefs')
         ):
-            arr[tstart] = arr[tend]
+            M1[k1][k2] = np.array(af['M1'][k1][k2])
+            M3[k1][k2] = np.array(af['M3'][k1][k2])
 
-    M1zk = M1zk[:args.nkeep]
-    M3zk = M3zk[:args.nkeep]
-    M1M3zk = M1M3zk[:args.nkeep]
+    for mirror in (M1, M3):
+        for k1, k2 in (
+            ('grid', 'z'),
+            ('grid', 'dzdx'),
+            ('grid', 'dzdy'),
+            ('grid', 'd2zdxy'),
+            ('zk', 'coefs')
+        ):
+            if tstart:=eval(args.swap):
+                tend = np.roll(tstart, len(tstart)//2)
+                arr = mirror[k1][k2]
+                arr[tstart] = arr[tend]
+            # Truncate to nkeep
+            mirror[k1][k2] = mirror[k1][k2][:args.nkeep]
 
-    M1_z_grid = M1_z_grid[:args.nkeep]
-    M1_dzdx_grid = M1_dzdx_grid[:args.nkeep]
-    M1_dzdy_grid = M1_dzdy_grid[:args.nkeep]
-    M1_d2zdxy_grid = M1_d2zdxy_grid[:args.nkeep]
-
-    M3_z_grid = M3_z_grid[:args.nkeep]
-    M3_dzdx_grid = M3_dzdx_grid[:args.nkeep]
-    M3_dzdy_grid = M3_dzdy_grid[:args.nkeep]
-    M3_d2zdxy_grid = M3_d2zdxy_grid[:args.nkeep]
-
-    fits.writeto(
-        os.path.join(
-            args.outdir,
-            "M1_bend_coords.fits.gz"
-        ),
-        np.stack([M1_x_grid, M1_x_grid]),
-        overwrite=True
-    )
-    fits.writeto(
-        os.path.join(
-            args.outdir,
-            "M3_bend_coords.fits.gz"
-        ),
-        np.stack([M3_x_grid, M3_x_grid]),
-        overwrite=True
-    )
-    fits.writeto(
-        os.path.join(
-            args.outdir,
-            "M1_bend_grid.fits.gz"
-        ),
-        np.stack([M1_z_grid, M1_dzdx_grid, M1_dzdy_grid, M1_d2zdxy_grid]),
-        overwrite=True
-    )
-    fits.writeto(
-        os.path.join(
-            args.outdir,
-            "M3_bend_grid.fits.gz"
-        ),
-        np.stack([M3_z_grid, M3_dzdx_grid, M3_dzdy_grid, M3_d2zdxy_grid]),
-        overwrite=True
-    )
-    if np.all(M1zk==0.0):
+    for mirror, name in [(M1, 'M1'), (M3, 'M3')]:
         fits.writeto(
             os.path.join(
                 args.outdir,
-                "M13_bend_zk.fits.gz"
+                f"{name}_bend_coords.fits.gz"
             ),
-            M1M3zk,
-            overwrite=True
-        )
-    else:
-        fits.writeto(
-            os.path.join(
-                args.outdir,
-                "M1_bend_zk.fits.gz"
-            ),
-            M1zk,
+            np.stack([mirror['grid']['x'], mirror['grid']['x']]),
             overwrite=True
         )
         fits.writeto(
             os.path.join(
                 args.outdir,
-                "M3_bend_zk.fits.gz"
+                f"{name}_bend_grid.fits.gz"
             ),
-            M3zk,
+            np.stack([
+                mirror['grid']['z'],
+                mirror['grid']['dzdx'],
+                mirror['grid']['dzdy'],
+                mirror['grid']['d2zdxy']
+            ]),
+            overwrite=True
+        )
+        fits.writeto(
+            os.path.join(
+                args.outdir,
+                f"{name}_bend_zk.fits.gz"
+            ),
+            mirror['zk']['coefs'],
             overwrite=True
         )
 
@@ -104,10 +78,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input",
         type=str,
-        default="M1M3_decomposition.pkl",
+        default="M1M3_decomposition.asdf",
         help=
-            "Input Zernike+grid decomposition pkl.  "
-            "Default: M1M3_decomposition.pkl"
+            "Input Zernike+grid decomposition asdf.  "
+            "Default: M1M3_decomposition.asdf"
     )
     parser.add_argument(
         "--outdir",
