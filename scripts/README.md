@@ -1,13 +1,8 @@
 # Python Scripts
 
-M1M3_NASTRAN_to_norm.py
-M2_NASTRAN_to_norm.py
-    Load NASTRAN unit actuator load data, optionally adjust with Piston/Tip/Tilt removals, and decompose into bending modes.  Note that the outputs are motions along the normal direction -- these will need to be reprojected into the sag direction for raytracing programs.
-
-
-M1M3_norm_to_sag.py
-M2_norm_to_sag.py
-    Reproject bending modes from surface normal displacements to sag displacements.
+M1M3_NASTRAN.py
+M2_NASTRAN.py
+    Load NASTRAN unit actuator load data, optionally adjust with Piston/Tip/Tilt removals, and decompose into bending modes.  Output both motions along the normal direction and as sags parallel to the optic axis.
 
 
 M1M3_decompose_sag.py
