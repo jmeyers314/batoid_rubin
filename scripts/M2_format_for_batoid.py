@@ -3,54 +3,66 @@ from pathlib import Path
 
 import astropy.io.fits as fits
 import numpy as np
-import pickle
+import asdf
+
 
 def main(args):
     Path(args.outdir).mkdir(parents=True, exist_ok=True)
 
-    with open(args.input, 'rb') as f:
-        (M2zk,
-         M2_x_grid, M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid,
-        ) = pickle.load(f)
-
-    if tstart:=eval(args.swap):
-        # swap first half for second half
-        tend = np.roll(tstart, len(tstart)//2)
-        for arr in (
-            M2zk,
-            M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid
+    # Read in asdf, copy to dict
+    with asdf.open(args.input) as af:
+        M2 = dict(grid=dict(), zk=dict())
+        for k1, k2 in (
+            ('grid', 'x'),
+            ('grid', 'z'),
+            ('grid', 'dzdx'),
+            ('grid', 'dzdy'),
+            ('grid', 'd2zdxy'),
+            ('zk', 'coefs')
         ):
+            M2[k1][k2] = np.array(af['M2'][k1][k2])
+
+    for k1, k2 in (
+        ('grid', 'z'),
+        ('grid', 'dzdx'),
+        ('grid', 'dzdy'),
+        ('grid', 'd2zdxy'),
+        ('zk', 'coefs')
+    ):
+        if tstart:=eval(args.swap):
+            tend = np.roll(tstart, len(tstart)//2)
+            arr = M2[k1][k2]
             arr[tstart] = arr[tend]
-
-    M2zk = M2zk[:args.nkeep]
-
-    M2_z_grid = M2_z_grid[:args.nkeep]
-    M2_dzdx_grid = M2_dzdx_grid[:args.nkeep]
-    M2_dzdy_grid = M2_dzdy_grid[:args.nkeep]
-    M2_d2zdxy_grid = M2_d2zdxy_grid[:args.nkeep]
+        # Truncate to nkeep
+        M2[k1][k2] = M2[k1][k2][:args.nkeep]
 
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M2_bend_coords.fits.gz"
+            f"M2_bend_coords.fits.gz"
         ),
-        np.stack([M2_x_grid, M2_x_grid]),
+        np.stack([M2['grid']['x'], M2['grid']['x']]),
         overwrite=True
     )
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M2_bend_grid.fits.gz"
+            f"M2_bend_grid.fits.gz"
         ),
-        np.stack([M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid]),
+        np.stack([
+            M2['grid']['z'],
+            M2['grid']['dzdx'],
+            M2['grid']['dzdy'],
+            M2['grid']['d2zdxy']
+        ]),
         overwrite=True
     )
     fits.writeto(
         os.path.join(
             args.outdir,
-            "M2_bend_zk.fits.gz"
+            f"M2_bend_zk.fits.gz"
         ),
-        M2zk,
+        M2['zk']['coefs'],
         overwrite=True
     )
 
@@ -61,10 +73,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input",
         type=str,
-        default="M2_decomposition.pkl",
+        default="M2_decomposition.asdf",
         help=
-            "Input Zernike+grid decomposition pkl.  "
-            "Default: M2_decomposition.pkl"
+            "Input Zernike+grid decomposition asdf.  "
+            "Default: M2_decomposition.asdf"
     )
     parser.add_argument(
         "--outdir",

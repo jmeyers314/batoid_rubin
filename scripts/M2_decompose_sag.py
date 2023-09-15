@@ -1,4 +1,4 @@
-import pickle
+import asdf
 import batoid
 
 from galsim.zernike import zernikeBasis, Zernike
@@ -74,16 +74,19 @@ def main(args):
     else:
         M2_inner = 0.9
 
-    if args.input.endswith('.pkl'):
-        with open(args.input, 'rb') as f:
-            x, y, Udn3norm, Vdn3norm = pickle.load(f)
+    if args.input.endswith('.asdf'):
+        with asdf.open(args.input) as af:
+            x = np.array(af['fea_nodes']['X_Position'].data)
+            y = np.array(af['fea_nodes']['Y_Position'].data)
+            Udn3norm = np.array(af['bend_1um']['sag'])
+            Vdn3norm = np.array(af['bend_1um']['force'])
     elif args.input.endswith('.mat'):
         data = loadmat(args.input)
         x = data['x'][:, 0]
         y = data['y'][:, 0]
-        Udn3norm = data['Udn3norm']
-        Vdn3norm = data['Vdn3norm']
-    nnode, nmode = Udn3norm.shape
+        Udn3norm = data['Udn3norm'].T
+        Vdn3norm = data['Vdn3norm'].T
+    nmode, nnode = Udn3norm.shape
 
     M2zk = np.zeros((nmode, args.jmax+1))
 
@@ -92,7 +95,7 @@ def main(args):
     )
     zk_eval2 = np.zeros((nmode, len(x)))
     for imode in tqdm(range(nmode)):
-        coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[:, imode], rcond=None)
+        coefs, *_ = np.linalg.lstsq(basis.T, Udn3norm[imode], rcond=None)
         M2zk[imode] = coefs
         zk_eval2[imode] = Zernike(
             coefs, R_inner=M2_inner, R_outer=M2_outer
@@ -103,7 +106,7 @@ def main(args):
     M2_dzdy_grid = np.empty((nmode, args.ngrid, args.ngrid))
     M2_d2zdxy_grid = np.empty((nmode, args.ngrid, args.ngrid))
 
-    z2 = Udn3norm.T - zk_eval2
+    z2 = Udn3norm - zk_eval2
 
     m2gridder = Gridder(x, y, args.ngrid, M2_outer, interp='z')
     for imode in tqdm(range(nmode)):
@@ -173,12 +176,25 @@ def main(args):
         fig.tight_layout()
         plt.show()
 
-    with open(args.output, 'wb') as f:
-        pickle.dump(
-            (M2zk,
-             m2gridder.x_grid, M2_z_grid, M2_dzdx_grid, M2_dzdy_grid, M2_d2zdxy_grid),
-            f
-        )
+    tree = dict(
+        M2=dict(
+            grid=dict(
+                x=m2gridder.x_grid,
+                z=M2_z_grid,
+                dzdx=M2_dzdx_grid,
+                dzdy=M2_dzdy_grid,
+                d2zdxy=M2_d2zdxy_grid,
+            ),
+            zk = dict(
+                coefs=M2zk,
+                R_inner=M2_inner,
+                R_outer=M2_outer,
+            )
+        ),
+        args = vars(args)
+    )
+
+    asdf.AsdfFile(tree).write_to(args.output)
 
 
 if __name__ == "__main__":
@@ -187,15 +203,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input",
         type=str,
-        default="M2_sag.pkl",
-        help="Input pickle or mat file.  Default: M2_sag.pkl"
+        default="M2_sag.asdf",
+        help="Input asdf or mat file.  Default: M2_sag.asdf"
     )
     parser.add_argument(
         "output",
-        default="M2_decomposition.pkl",
+        default="M2_decomposition.asdf",
         help=
             "output file name  "
-            "Default: M2_decomposition.pkl",
+            "Default: M2_decomposition.asdf",
         nargs='?'
     )
     parser.add_argument(

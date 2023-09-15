@@ -11,6 +11,6 @@ python M1M3_decompose_sag.py --input $OUT_DIR/M1M3_corrected.asdf --zk_simultane
 python M1M3_format_for_batoid.py --input $OUT_DIR/M1M3_decomposition_corrected.asdf --outdir $OUT_DIR --nkeep 30
 
 
-python M2_NASTRAN.py --M2ptt 3 --indir $NASTRAN_DIR $OUT_DIR/M2_corrected.pkl
-python M2_decompose_sag.py --input $OUT_DIR/M2_corrected.pkl --circular $OUT_DIR/M2_decomposition_corrected.pkl
-python M2_format_for_batoid.py --input $OUT_DIR/M2_decomposition_corrected.pkl --outdir $OUT_DIR --nkeep 30
+python M2_NASTRAN.py --M2ptt 3 --indir $NASTRAN_DIR $OUT_DIR/M2_corrected.asdf
+python M2_decompose_sag.py --input $OUT_DIR/M2_corrected.asdf --circular $OUT_DIR/M2_decomposition_corrected.asdf
+python M2_format_for_batoid.py --input $OUT_DIR/M2_decomposition_corrected.asdf --outdir $OUT_DIR --nkeep 30
