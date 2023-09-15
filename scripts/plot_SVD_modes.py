@@ -1,4 +1,5 @@
-import pickle
+import asdf
+import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
@@ -20,14 +21,15 @@ plt.savefig("M1M3_ML_modes.png")
 
 
 for fn, outfn in [
-    ("/Users/josh/src/batoid_rubin/scripts/corrected/M1M3_norm_corrected.pkl",
+    ("/Users/josh/src/batoid_rubin/scripts/corrected/M1M3_corrected.asdf",
      "corrected_modes.png"),
-    ("/Users/josh/src/batoid_rubin/scripts/improved/M1M3_norm_improved.pkl",
+    ("/Users/josh/src/batoid_rubin/scripts/improved/M1M3_improved.asdf",
      "improved_modes.png")
 ]:
-    with open(fn, 'rb') as f:
-        x, y, w1, w3, Udn3norm, Vdn3norm =pickle.load(f)
-    z = Udn3norm.T
+    with asdf.open(fn) as af:
+        x = np.array(af['fea_nodes']['X_Position'])
+        y = np.array(af['fea_nodes']['Y_Position'])
+        z = np.array(af['bend_1um']['sag'])
 
     fig, axes = plt.subplots(nrows=6, ncols=5, figsize=(7,9))
     for i, ax in enumerate(axes.flat):
@@ -38,4 +40,3 @@ for fn, outfn in [
     fig.tight_layout()
     plt.savefig(outfn)
     # plt.show()
-
