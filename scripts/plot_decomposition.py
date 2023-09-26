@@ -5,7 +5,6 @@ import astropy.io.fits as fits
 from galsim.zernike import Zernike
 import matplotlib.pyplot as plt
 import numpy as np
-from tqdm import tqdm
 import yaml
 
 
@@ -80,6 +79,10 @@ def main(args):
         ax.set_yticks([])
         ax.set_aspect("equal")
     fig2.tight_layout()
+
+    if args.outprefix is not None:
+        fig.savefig(args.outprefix + "_M1M3.png", dpi=300)
+        fig2.savefig(args.outprefix + "_M2.png", dpi=300)
     plt.show()
 
 
@@ -91,6 +94,12 @@ if __name__ == "__main__":
         type=str,
         default='output',
         help='Directory containing the decomposition input files'
+    )
+    parser.add_argument(
+        '--outprefix',
+        type=str,
+        default=None,
+        help='Prefix for output files'
     )
     args = parser.parse_args()
     main(args)
