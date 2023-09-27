@@ -690,16 +690,172 @@ class LSSTBuilder:
             3,4 are M2 rot around x, y in arcsec
             5,6,7 are camera z,x,y in micron
             8,9 are camera rot around x, y in arcsec
-            10-29 are M1M3 bending modes in micron
-            30-49 are M2 bending modes in micron
+            The next len(use_m1m3_modes) are M1M3 bending modes in micron
+            The next len(use_m2_modes) are M2 bending modes in micron
 
         Returns
         -------
         ret : SSTBuilder
             New builder with specified AOS DOF.
         """
+        assert len(dof) == 10+len(self.use_m1m3_modes)+len(self.use_m2_modes)
         ret = copy(self)
         ret.dof = dof
+        return ret
+
+    @attach_attr(
+        _opt_params={
+            "dof":None,
+            "dx":float,
+            "dy":float,
+            "dz":float,
+            "rx":galsim.Angle,
+            "ry":galsim.Angle,
+        },
+    )
+    def with_m2_rigid(
+        self, dof=None, dx=None, dy=None, dz=None, rx=None, ry=None
+    ):
+        """Return new SSTBuilder that includes specified M2 rigid body DOF
+
+        Note that you cannot specify both dof and dx,dy,dz,rx,ry.
+        Values specified here overwrite M2 rigid body values specified in
+        with_aos_dof, but not other degrees of freedom.
+
+        Parameters
+        ----------
+        dof : ndarray (5,), optional
+            0,1,2 are M2 z,x,y in micron
+            3,4 are M2 rot around x, y in arcsec
+        dx, dy, dz : float
+            M2 displacement in micron
+        rx, ry : galsim.Angle
+            M2 rotation around x, y
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified M2 rigid body DOF.
+        """
+        ret = copy(self)
+        if (
+            any([x is not None for x in [dx, dy, dz, rx, ry]])
+            and dof is not None
+        ):
+            raise ValueError("Cannot specify both dof and dx,dy,dz,rx,ry")
+        if dof is not None:
+            ret.dof[:5] = dof
+        else:
+            if dz is not None:
+                ret.dof[0] = dz
+            if dx is not None:
+                ret.dof[1] = dx
+            if dy is not None:
+                ret.dof[2] = dy
+            if rx is not None:
+                ret.dof[3] = rx.deg*3600
+            if ry is not None:
+                ret.dof[4] = ry.deg*3600
+        return ret
+
+
+    @attach_attr(
+        _opt_params={
+            "dof":None,
+            "dx":float,
+            "dy":float,
+            "dz":float,
+            "rx":galsim.Angle,
+            "ry":galsim.Angle,
+        },
+    )
+    def with_camera_rigid(
+        self, dof=None, dx=None, dy=None, dz=None, rx=None, ry=None
+    ):
+        """Return new SSTBuilder that includes specified camera rigid body DOF
+
+        Note that you cannot specify both dof and dx,dy,dz,rx,ry.
+        Values specified here overwrite camera rigid body values specified in
+        with_aos_dof, but not other degrees of freedom.
+
+        Parameters
+        ----------
+        dof : ndarray (5,), optional
+            0,1,2 are camera z,x,y in micron
+            3,4 are camera rot around x, y in arcsec
+        dx, dy, dz : float
+            camera displacement in micron
+        rx, ry : galsim.Angle
+            camera rotation around x, y
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified camera rigid body DOF.
+        """
+        ret = copy(self)
+        if (
+            any([x is not None for x in [dx, dy, dz, rx, ry]])
+            and dof is not None
+        ):
+            raise ValueError("Cannot specify both dof and dx,dy,dz,rx,ry")
+        if dof is not None:
+            ret.dof[5:10] = dof
+        else:
+            if dz is not None:
+                ret.dof[5] = dz
+            if dx is not None:
+                ret.dof[6] = dx
+            if dy is not None:
+                ret.dof[7] = dy
+            if rx is not None:
+                ret.dof[8] = rx.deg*3600
+            if ry is not None:
+                ret.dof[9] = ry.deg*3600
+        return ret
+
+    @attach_attr(
+        _req_params={
+            "dof":None,
+        },
+    )
+    def with_m1m3_bend(self, dof):
+        """Return new SSTBuilder that includes specified M1M3 bending modes
+
+        Parameters
+        ----------
+        dof : ndarray (len(use_m1m3_modes),)
+            M1M3 bending modes in micron
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified M1M3 bending modes.
+        """
+        ret = copy(self)
+        ret.dof[self.m1m3_dof_indices] = dof
+        return ret
+
+    @attach_attr(
+        _req_params={
+            "dof":None,
+        },
+    )
+    def with_m2_bend(self, dof):
+        """Return new SSTBuilder that includes specified M2 bending modes
+
+        Parameters
+        ----------
+        dof : ndarray (len(use_m2_modes),)
+            M2 bending modes in micron
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with specified M2 bending modes.
+        """
+        ret = copy(self)
+        ret.dof[self.m2_dof_indices] = dof
         return ret
 
     @attach_attr(
