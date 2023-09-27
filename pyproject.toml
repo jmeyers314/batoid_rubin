@@ -5,15 +5,11 @@ authors = [
 ]
 dependencies = [
     "batoid",
+    "danish",
+    "ipywidgets",
     "zenodo_get"
 ]
 dynamic = ["version"]
-
-[project.optional-dependencies]
-notebooks = [
-    "danish",
-    "ipywidgets",
-]
 
 [build-system]
 requires = ["setuptools"]
