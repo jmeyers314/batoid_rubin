@@ -8,6 +8,8 @@ import astropy.io.fits as fits
 import galsim
 import numpy as np
 from textwrap import dedent
+from scipy.io import loadmat
+from astropy.table import Table
 
 
 def convert_zernikes(bendpath, fn_template, amplitude, outfile):
@@ -79,11 +81,71 @@ def main(args):
     outpath.mkdir(parents=True, exist_ok=True)
     femappath = Path(args.femap_dir)
 
+    # Load actuator data
+    m1m3_actuators = Table(np.genfromtxt(
+        femappath / "0M1M3Bending" / "ForceActuatorTable.csv",
+        names=True,
+        delimiter=',',
+        defaultfmt="d,d,f,f,f,f,f,f,f",
+        usecols=range(5)
+    ))
+    m1m3_actuators['Index'] = m1m3_actuators['Index'].astype(int)
+    m1m3_actuators['ID'] = m1m3_actuators['ID'].astype(int)
+    m1m3_actuators.write(
+        outpath/"M1M3_actuator_table.fits.gz",
+        overwrite=True
+    )
+
+    m2_actuators = Table(np.genfromtxt(
+        femappath / "1M2Bending" / "M2actuatorNodesXY_M2_FEA_CS.txt",
+        names=['id', 'x', 'y']
+    ))
+    m2_actuators['id'] = m2_actuators['id'].astype(int)
+    # M2 FEA CS -> M2 CS; see https://sitcomtn-003.lsst.io/#m2
+    m2_actuators['x'], m2_actuators['y'] = -m2_actuators['y'], -m2_actuators['x']
+    m2_actuators['x'] *= 0.0254  # inches -> meters
+    m2_actuators['y'] *= 0.0254
+    m2_actuators['Index'] = np.arange(len(m2_actuators)).astype(int)
+    m2_actuators['ID'] = m2_actuators['id']
+    m2_actuators['X_Position'] = m2_actuators['x']
+    m2_actuators['Y_Position'] = m2_actuators['y']
+    del m2_actuators['id'], m2_actuators['x'], m2_actuators['y']
+    m2_actuators.write(
+        outpath/"M2_actuator_table.fits.gz",
+        overwrite=True
+    )
+
+    m1m3_mat = loadmat(
+        femappath / "0M1M3Bending" / "2bendingModes" / "m1m3_Urt3norm.mat"
+    )
+    m1m3_forces = m1m3_mat['Vrt3norm'].T
+    m1m3_forces[19] = m1m3_forces[26]
+    m1m3_forces = m1m3_forces[:20]
+
+    fits.writeto(
+        outpath/"M1M3_bend_forces.fits.gz",
+        m1m3_forces,
+        overwrite=True
+    )
+
+    m2_mat = loadmat(
+        femappath / "1M2Bending" / "2bendingModes" / "m2_Urt3norm.mat"
+    )
+    m2_forces = m2_mat['Vrt3norm']
+    m2_forces[[17,18,19]] = m2_forces[[25,26,27]]
+    m2_forces = m2_forces[:20]
+
+    fits.writeto(
+        outpath/"M2_bend_forces.fits.gz",
+        m2_forces,
+        overwrite=True
+    )
+
     # First construct the controlling yaml file.
     config = dedent("""
         M1:
           zk:
-            file: M13_bend_zk.fits.gz
+            file: M1M3_bend_zk.fits.gz
             R_outer: 4.18
           grid:
             file: M1_bend_grid.fits.gz
@@ -97,7 +159,7 @@ def main(args):
             coords: M2_bend_coords.fits.gz
         M3:
           zk:
-            file: M13_bend_zk.fits.gz    # Same as M1!
+            file: M1M3_bend_zk.fits.gz    # Same as M1!
             R_outer: 4.18
           grid:
             file: M3_bend_grid.fits.gz
@@ -115,7 +177,7 @@ def main(args):
         bendpath,
         "M13_b{}_0.50_gridz.txt",
         0.5,
-        outpath/"M13_bend_zk.fits.gz"
+        outpath/"M1M3_bend_zk.fits.gz"
     )
 
     convert_zernikes(

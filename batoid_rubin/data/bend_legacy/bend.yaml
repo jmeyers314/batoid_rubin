@@ -1,6 +1,6 @@
 M1:
   zk:
-    file: M13_bend_zk.fits.gz
+    file: M1M3_bend_zk.fits.gz
     R_outer: 4.18
   grid:
     file: M1_bend_grid.fits.gz
@@ -14,7 +14,7 @@ M2:
     coords: M2_bend_coords.fits.gz
 M3:
   zk:
-    file: M13_bend_zk.fits.gz    # Same as M1!
+    file: M1M3_bend_zk.fits.gz    # Same as M1!
     R_outer: 4.18
   grid:
     file: M3_bend_grid.fits.gz
