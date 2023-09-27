@@ -7,7 +7,8 @@ import asdf
 
 
 def main(args):
-    Path(args.outdir).mkdir(parents=True, exist_ok=True)
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
     # Read in asdf, copy to dict
     with asdf.open(args.input) as af:
@@ -23,6 +24,7 @@ def main(args):
         ):
             M1[k1][k2] = np.array(af['M1'][k1][k2])
             M3[k1][k2] = np.array(af['M3'][k1][k2])
+        forces_file = af['args']['input']
 
     for mirror in (M1, M3):
         for k1, k2 in (
@@ -41,18 +43,12 @@ def main(args):
 
     for mirror, name in [(M1, 'M1'), (M3, 'M3')]:
         fits.writeto(
-            os.path.join(
-                args.outdir,
-                f"{name}_bend_coords.fits.gz"
-            ),
+            outdir / f"{name}_bend_coords.fits.gz",
             np.stack([mirror['grid']['x'], mirror['grid']['x']]),
             overwrite=True
         )
         fits.writeto(
-            os.path.join(
-                args.outdir,
-                f"{name}_bend_grid.fits.gz"
-            ),
+            outdir / f"{name}_bend_grid.fits.gz",
             np.stack([
                 mirror['grid']['z'],
                 mirror['grid']['dzdx'],
@@ -62,13 +58,22 @@ def main(args):
             overwrite=True
         )
         fits.writeto(
-            os.path.join(
-                args.outdir,
-                f"{name}_bend_zk.fits.gz"
-            ),
+            outdir / f"{name}_bend_zk.fits.gz",
             mirror['zk']['coefs'],
             overwrite=True
         )
+
+    if args.do_forces:
+        with asdf.open(forces_file) as af:
+            fits.writeto(
+                outdir / "M1M3_bend_forces.fits.gz",
+                af['bend_1um']['force'][:args.nkeep],
+                overwrite=True
+            )
+            af['actuators'].write(
+                outdir / "M1M3_actuator_table.fits.gz",
+                overwrite=True
+            )
 
 
 if __name__ == "__main__":
@@ -102,6 +107,11 @@ if __name__ == "__main__":
         type=int,
         default=20,
         help="Number of modes to keep.  Default: 20"
+    )
+    parser.add_argument(
+        "--do_forces",
+        action='store_true',
+        help="Populate forces from asdf file.  Default: False"
     )
     args = parser.parse_args()
     main(args)
