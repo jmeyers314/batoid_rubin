@@ -148,9 +148,68 @@ def test_modes_permutation():
             trays1.failed, trays2.failed
         )
 
+def test_subsys_dof():
+    rng = np.random.default_rng(5772156649)
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+
+    # Use a subset of the permuted modes to maximally stress the code.
+    use_m1m3_modes = rng.permutation(20)[:18]
+    use_m2_modes = rng.permutation(20)[:16]
+    builder = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        use_m1m3_modes=use_m1m3_modes,
+        use_m2_modes=use_m2_modes
+    )
+    for _ in range(10):
+        m2_dz = rng.uniform(-1, 1)
+        m2_dx = rng.uniform(-100, 100)
+        m2_dy = rng.uniform(-100, 100)
+        m2_rx = rng.uniform(-1, 1)
+        m2_ry = rng.uniform(-1, 1)
+
+        cam_dz = rng.uniform(-1, 1)
+        cam_dx = rng.uniform(-100, 100)
+        cam_dy = rng.uniform(-100, 100)
+        cam_rx = rng.uniform(-1, 1)
+        cam_ry = rng.uniform(-1, 1)
+
+        m1m3_bend = rng.uniform(-0.05, 0.05, size=18)
+        m2_bend = rng.uniform(-0.05, 0.05, size=16)
+
+        m2_dof = [m2_dz, m2_dx, m2_dy, m2_rx, m2_ry]
+        cam_dof = [cam_dz, cam_dx, cam_dy, cam_rx, cam_ry]
+        dof = np.concatenate([
+            m2_dof,
+            cam_dof,
+            m1m3_bend,
+            m2_bend
+        ])
+
+        builder1 = builder.with_aos_dof(dof)
+        builder2 = builder.with_m2_rigid(
+            dz=m2_dz, dx=m2_dx, dy=m2_dy,
+            rx=m2_rx*galsim.arcsec, ry=m2_ry*galsim.arcsec
+        ).with_camera_rigid(
+            dz=cam_dz, dx=cam_dx, dy=cam_dy,
+            rx=cam_rx*galsim.arcsec, ry=cam_ry*galsim.arcsec
+        ).with_m1m3_bend(m1m3_bend).with_m2_bend(m2_bend)
+        builder3 = builder.with_m2_rigid(
+            dof=m2_dof
+        ).with_camera_rigid(
+            dof=cam_dof
+        ).with_m1m3_bend(m1m3_bend).with_m2_bend(m2_bend)
+
+        scope1 = builder1.build()
+        scope2 = builder2.build()
+        scope3 = builder3.build()
+
+        assert scope1 == scope2
+        assert scope1 == scope3
+
 
 if __name__ == "__main__":
     test_builder()
     test_attr()
     test_ep_phase()
     test_modes_permutation()
+    test_subsys_dof()
