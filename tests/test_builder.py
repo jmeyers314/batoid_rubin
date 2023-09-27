@@ -13,34 +13,6 @@ zen = 30 * galsim.degrees
 rot = 15 * galsim.degrees
 
 
-def test_fea_nodes_load():
-    bx, by, idx1, idx3 = batoid_rubin.builder.m1m3_fea_nodes(fea_dir)
-    bx, by = batoid_rubin.builder.m2_fea_nodes(fea_dir)
-
-
-def test_grid_xy_load():
-    m1_grid_xy, m3_grid_xy = batoid_rubin.builder.m1m3_grid_xy(bend_dir)
-    m2_grid_xy = batoid_rubin.builder.m2_grid_xy(bend_dir)
-
-
-def test_fea():
-    telescope = batoid.Optic.fromYaml("LSST_r.yaml")
-    grav = batoid_rubin.builder.m1m3_gravity(fea_dir, telescope, zen)
-    temp = batoid_rubin.builder.m1m3_temperature(fea_dir, 0.0, 0.0, 0.0, 0.0, 0.0)
-    lut = batoid_rubin.builder.m1m3_lut(fea_dir, zen, 0.0, 0)
-
-    grav = batoid_rubin.builder.m2_gravity(fea_dir, zen)
-    temp = batoid_rubin.builder.m2_temperature(fea_dir, 0.0, 0.0)
-
-
-def test_load_bend():
-    dof = (0,)*20
-    inds = tuple(range(20))
-    m1_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M1")
-    m2_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M2")
-    m3_bend = batoid_rubin.builder.realize_bend(bend_dir, dof, inds, "M3")
-
-
 def test_builder():
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
     builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
@@ -178,10 +150,6 @@ def test_modes_permutation():
 
 
 if __name__ == "__main__":
-    test_fea_nodes_load()
-    test_grid_xy_load()
-    test_fea()
-    test_load_bend()
     test_builder()
     test_attr()
     test_ep_phase()

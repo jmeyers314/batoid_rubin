@@ -385,14 +385,34 @@ class LSSTBuilder:
             from . import datadir
             fea_dir = datadir / fea_dir
             if not fea_dir.is_dir():
-                raise ValueError("Cannot infer fea_dir.")
+                # See if we can download the data from Zenodo.
+                from .data.download_rubin_data import (
+                    download_rubin_data, zenodo_dois
+                )
+                if fea_dir.name in zenodo_dois:
+                    args = namedtuple("Args", ["dataset", "outdir"])
+                    args.dataset = fea_dir.parts[-1]
+                    args.outdir = None
+                    download_rubin_data(args)
+                else:
+                    raise ValueError("Cannot infer fea_dir.")
 
         if not bend_dir.is_dir():
             # See if we can find the data in the batoid_rubin data directory.
             from . import datadir
             bend_dir = datadir / bend_dir
             if not bend_dir.is_dir():
-                raise ValueError("Cannot infer bend_dir.")
+                # See if we can download the data from Zenodo.
+                from .data.download_rubin_data import (
+                    download_rubin_data, zenodo_dois
+                )
+                if bend_dir.name in zenodo_dois:
+                    args = namedtuple("Args", ["dataset", "outdir"])
+                    args.dataset = bend_dir.parts[-1]
+                    args.outdir = None
+                    download_rubin_data(args)
+                else:
+                    raise ValueError("Cannot infer bend_dir.")
 
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
