@@ -4,7 +4,9 @@ from subprocess import run
 
 zenodo_dois = {
     "bend_legacy": 8383823,
-    "fea_legacy": 8384326
+    "fea_legacy": 8384326,
+    "bend": 8384775,
+    "bend_ptt": 8384781,
 }
 
 

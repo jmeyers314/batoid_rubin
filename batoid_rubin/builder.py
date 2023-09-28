@@ -338,7 +338,7 @@ class LSSTBuilder:
         self,
         fiducial,
         fea_dir="fea_legacy",
-        bend_dir="bend_legacy",
+        bend_dir="bend",
         use_m1m3_modes=None,
         use_m2_modes=None,
     ):
