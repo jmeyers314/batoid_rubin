@@ -8,6 +8,8 @@ API Changes
 
 New Features
 ------------
+- Added new bending modes.
+- Bending mode and fea files are now based on Zenodo.
 
 
 Performance Improvements
