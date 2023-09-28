@@ -7,7 +7,7 @@ import numpy as np
 
 
 fea_dir = Path(batoid_rubin.datadir) / "fea_legacy"
-bend_dir = Path(batoid_rubin.datadir) / "bend_legacy"
+bend_dir = Path(batoid_rubin.datadir) / "bend"
 
 zen = 30 * galsim.degrees
 rot = 15 * galsim.degrees
@@ -97,15 +97,21 @@ def test_ep_phase():
         nx=128, jmax=28, eps=0.61
     )
 
-    np.testing.assert_allclose(zk1[4:], 0.0, atol=2e-3)  # 0.002 waves isn't so bad
+    np.testing.assert_allclose(
+        zk1[4:], 0.0, atol=2e-3
+    )  # 0.002 waves isn't so bad
 
 
 def test_modes_permutation():
-    """Test that permuting both dof and use_m1m3_modes identically gives same result as no
-    permutation.
+    """Test that permuting both dof and use_m1m3_modes identically gives same
+    result as no permutation.
     """
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
-    builder1 = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    builder1 = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        use_m1m3_modes=list(range(20)),
+        use_m2_modes=list(range(20))
+    )
     rays = batoid.RayVector.asPolar(
         optic=fiducial,
         wavelength=622e-9,
@@ -120,7 +126,7 @@ def test_modes_permutation():
         p1 = rng.permutation(20)
         p2 = rng.permutation(20)
         builder2 = batoid_rubin.builder.LSSTBuilder(
-            fiducial, fea_dir, bend_dir,
+            fiducial,
             use_m1m3_modes=p1,
             use_m2_modes=p2
         )
