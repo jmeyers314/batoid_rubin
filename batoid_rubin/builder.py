@@ -1250,3 +1250,19 @@ class LSSTBuilder:
                 )
 
         return optic
+
+# Attach GalSim config attributes to use when constructing LSSTBuilder
+# Don't actually require `fiducial`, since that's handled manually in the
+# ImSim config.
+LSSTBuilder._req_params = {}
+LSSTBuilder._single_params = {}
+LSSTBuilder._opt_params = {
+    "fea_dir":str,
+    "bend_dir":str,
+    "use_m1m3_modes":None,
+    "use_m2_modes":None,
+}
+# Ignore with_* args in the ImSim config dict
+LSSTBuilder._ignore_params = {
+    k[5:]:None for k in dir(LSSTBuilder) if k.startswith("with_")
+}
