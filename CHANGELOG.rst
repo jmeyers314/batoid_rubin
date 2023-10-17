@@ -20,3 +20,4 @@ Bug Fixes
 ---------
 - Fixed bug where ComCam camera perturbations moved entire telescope
   instead of just the camera.
+- Use new Zenodo API.
