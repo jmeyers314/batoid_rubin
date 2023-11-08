@@ -436,8 +436,10 @@ class LSSTBuilder:
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
-        elif 'ComCam.ComCam' in self.fiducial.itemDict:
+        elif 'ComCam.ComCam' in self.fiducial.itemDict:  # Older version
             self.cam_name = 'ComCam.ComCam'
+        elif 'RubinComCam.ComCam' in self.fiducial.itemDict:
+            self.cam_name = 'RubinComCam.ComCam'
         else:
             raise ValueError("Unsupported optic")
 
