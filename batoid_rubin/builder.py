@@ -463,7 +463,7 @@ class LSSTBuilder:
         self.camera_rotation = None
         self.camera_TBulk = None
 
-        self.dof = np.zeros(50)
+        self.dof = np.zeros(10+len(self.use_m1m3_modes)+len(self.use_m2_modes))
         self.extra_zk = None
         self.extra_zk_eps = None
 
@@ -566,8 +566,8 @@ class LSSTBuilder:
 
         ret = copy(self)
         ret.m1m3_lut_zenith = zenith
-        ret.m1m3_lut_error=error
-        ret.m1m3_lut_seed=seed
+        ret.m1m3_lut_error = error
+        ret.m1m3_lut_seed = seed
         return ret
 
     @attach_attr(
@@ -740,6 +740,8 @@ class LSSTBuilder:
             New builder with specified M2 rigid body DOF.
         """
         ret = copy(self)
+        # Explicitly make a copy of ret.dof so we don't modify the original
+        ret.dof = ret.dof.copy()
         if (
             any([x is not None for x in [dx, dy, dz, rx, ry]])
             and dof is not None
@@ -796,6 +798,8 @@ class LSSTBuilder:
             New builder with specified camera rigid body DOF.
         """
         ret = copy(self)
+        # Explicitly make a copy of ret.dof so we don't modify the original
+        ret.dof = ret.dof.copy()
         if (
             any([x is not None for x in [dx, dy, dz, rx, ry]])
             and dof is not None
@@ -835,6 +839,8 @@ class LSSTBuilder:
             New builder with specified M1M3 bending modes.
         """
         ret = copy(self)
+        # Explicitly make a copy of ret.dof so we don't modify the original
+        ret.dof = ret.dof.copy()
         ret.dof[self.m1m3_dof_indices] = dof
         return ret
 
@@ -857,6 +863,8 @@ class LSSTBuilder:
             New builder with specified M2 bending modes.
         """
         ret = copy(self)
+        # Explicitly make a copy of ret.dof so we don't modify the original
+        ret.dof = ret.dof.copy()
         ret.dof[self.m2_dof_indices] = dof
         return ret
 

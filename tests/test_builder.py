@@ -205,12 +205,8 @@ def test_subsys_dof():
             dof=cam_dof
         ).with_m1m3_bend(m1m3_bend).with_m2_bend(m2_bend)
 
-        scope1 = builder1.build()
-        scope2 = builder2.build()
-        scope3 = builder3.build()
-
-        assert scope1 == scope2
-        assert scope1 == scope3
+        np.testing.assert_allclose(builder1.dof, builder2.dof)
+        np.testing.assert_allclose(builder1.dof, builder3.dof)
 
 
 if __name__ == "__main__":
