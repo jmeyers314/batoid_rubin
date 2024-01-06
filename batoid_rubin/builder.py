@@ -27,6 +27,22 @@ RealizedBend = namedtuple(
 
 @lru_cache(maxsize=2)
 def m1m3_fea_nodes(fea_dir):
+    """Return FEA node positions and mirror flags for M1M3.
+
+    For fea_legacy, there are 5256 nodes, 3474 in M1 and 1782 in M3.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+
+    Returns
+    -------
+    bx, by : ndarray
+        Node x and y positions in meters in M1M3 coordinate system.
+    idx1, idx3 : ndarray
+        Boolean arrays indicating which nodes are in M1 and M3, respectively.
+    """
     data = fits.getdata(Path(fea_dir) / "M1M3_1um_156_grid.fits.gz")
     idx = data[:, 0]
     bx = data[:, 1]  # (5256,)
@@ -42,6 +58,21 @@ def m1m3_fea_nodes(fea_dir):
 
 @lru_cache(maxsize=4)
 def m1m3_grid_xy(bend_dir):
+    """Return M1M3 bending mode grid x and y positions.
+
+    These 1d arrays are the rectangular grid coordinates of the bending mode
+    grids.  There are typically 204 points in each direction.
+
+    Parameters
+    ----------
+    bend_dir : str
+        Directory containing the bending mode files.
+
+    Returns
+    -------
+    m1_grid_xy, m3_grid_xy : ndarray
+        M1M3 grid x and y positions in meters in M1M3 coordinate system.
+    """
     with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
     m1_grid_xy = fits.getdata(Path(bend_dir) / config['M1']['grid']['coords'])
@@ -53,6 +84,20 @@ def m1m3_grid_xy(bend_dir):
 
 @lru_cache(maxsize=2)
 def m2_fea_nodes(fea_dir):
+    """Return FEA node positions and mirror flags for M2.
+
+    For fea_legacy, there are 15984 M2 FEA nodes.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+
+    Returns
+    -------
+    bx, by : ndarray
+        Node x and y positions in meters in M2 coordinate system.
+    """
     data = fits.getdata(Path(fea_dir) / "M2_1um_grid.fits.gz")
     bx = data[:, 1]  # meters
     by = data[:, 2]
@@ -63,6 +108,21 @@ def m2_fea_nodes(fea_dir):
 
 @lru_cache(maxsize=4)
 def m2_grid_xy(bend_dir):
+    """Return M2 bending mode grid x and y positions.
+
+    These 1d arrays are the rectangular grid coordinates of the bending mode
+    grids.  There are typically 204 points in each direction.
+
+    Parameters
+    ----------
+    bend_dir : str
+        Directory containing the bending mode files.
+
+    Returns
+    -------
+    m2_grid_xy : ndarray
+        M2 grid x and y positions in meters in M2 coordinate system.
+    """
     with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
     m2_grid_xy = fits.getdata(Path(bend_dir) / config['M2']['grid']['coords'])
@@ -72,6 +132,27 @@ def m2_grid_xy(bend_dir):
 
 @lru_cache(maxsize=16)
 def m1m3_gravity(fea_dir, optic, zenith):
+    """Return M1M3 gravity displacement.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    optic : batoid.Optic
+        Optic before finite-element analysis (FEA) or active optics system
+        (AOS) perturbations are applied.
+    zenith : galsim.Angle
+        Zenith angle
+
+    Returns
+    -------
+    dz : ndarray
+        M1M3 gravity displacement along z direction in meters for FEA nodes.
+    """
+    # zdata = zenith print-through, hdata = horizon print-through
+    # shape = (5256, 3)
+    # - Each row is one of 5256 FEA nodes.
+    # - Columns are dx, dy, dz in M1M3 CS.
     zdata = _fits_cache(fea_dir, "M1M3_dxdydz_zenith.fits.gz")
     hdata = _fits_cache(fea_dir, "M1M3_dxdydz_horizon.fits.gz")
 
@@ -119,6 +200,28 @@ def m1m3_gravity(fea_dir, optic, zenith):
 
 @lru_cache(maxsize=16)
 def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
+    """Return M1M3 temperature displacement.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    TBulk : float
+        Bulk temperature in C.
+    TxGrad : float
+        Temperature gradient in x direction in C / m (?)
+    TyGrad : float
+        Temperature gradient in y direction in C / m (?)
+    TzGrad : float
+        Temperature gradient in z direction in C / m (?)
+    TrGrad : float
+        Temperature gradient in r direction in C / m (?)
+
+    Returns
+    -------
+    dz : ndarray
+        M1M3 temperature displacement along z direction in meters for FEA nodes.
+    """
     tbdz, txdz, tydz, tzdz, trdz = _fits_cache(
         fea_dir,
         "M1M3_thermal_FEA.fits.gz"
@@ -136,6 +239,24 @@ def m1m3_temperature(fea_dir, TBulk, TxGrad, TyGrad, TzGrad, TrGrad):
 
 @lru_cache(maxsize=16)
 def m1m3_lut(fea_dir, zenith, error, seed):
+    """Return M1M3 LUT forces.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    zenith : galsim.Angle
+        Zenith angle.
+    error : float
+        Fractional error to apply to LUT forces.
+    seed : int
+        Random seed to use for applying error.
+
+    Returns
+    -------
+    out : ndarray
+        M1M3 LUT forces in Newtons.
+    """
     if zenith is None:
         return np.zeros(256)
 
@@ -160,6 +281,7 @@ def m1m3_lut(fea_dir, zenith, error, seed):
         # LUT_force[155] = z_force - np.sum(LUT_force[:155])
         # LUT_force[-1] = y_force - np.sum(LUT_force[156:-1])
 
+    # Why are we computing and then subtracting u0?
     zf = _fits_cache(fea_dir, "M1M3_force_zenith.fits.gz")
     hf = _fits_cache(fea_dir, "M1M3_force_horizon.fits.gz")
     u0 = zf * np.cos(zenith)
@@ -171,6 +293,25 @@ def m1m3_lut(fea_dir, zenith, error, seed):
 
 
 def m1m3_force_to_surface(fea_dir, forces):
+    """Convert M1M3 forces to surface displacements.
+
+    Input is generally 256-element vector of forces, output is generally a
+    5256-element vector of surface displacements.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    forces : ndarray
+        M1M3 forces in Newtons.
+
+    Returns
+    -------
+    out : ndarray
+        M1M3 surface z-displacements at FEA node positions in meters.
+    """
+    # Note this 256-element influence matrix is different from the 156 element
+    # z-force only influence matrix associated with the bending modes.
     G = _fits_cache(fea_dir, "M1M3_influence_256.fits.gz")
     out = np.dot(G, forces)
     out.flags.writeable = False
@@ -178,6 +319,22 @@ def m1m3_force_to_surface(fea_dir, forces):
 
 
 def transform_zernike(zernike, R_outer, R_inner):
+    """Transform Zernike polynomial to new outer and inner radii.
+
+    Parameters
+    ----------
+    zernike : galsim.zernike.Zernike
+        Zernike polynomial to transform.
+    R_outer : float
+        New outer radius.
+    R_inner : float
+        New inner radius.
+
+    Returns
+    -------
+    ret : galsim.zernike.Zernike
+        Zernike polynomial with new outer and inner radii.
+    """
     xy = zernike._coef_array_xy
     ret = galsim.zernike.Zernike.__new__(galsim.zernike.Zernike)
     ret._coef_array_xy = xy
@@ -187,6 +344,24 @@ def transform_zernike(zernike, R_outer, R_inner):
 
 
 def _load_mirror_bend(bend_dir, inds, config):
+    """Load bending modes for a single mirror.
+
+    Bending modes are parameterized by a sum of a Zernike polynomial and a grid.
+
+    Parameters
+    ----------
+    bend_dir : str
+        Directory containing the bending mode files.
+    inds : list of int
+        List indicating the ordering of the bending modes to use.
+    config : dict
+        Configuration dictionary for this mirror.
+
+    Returns
+    -------
+    modes : BendingMode
+        Bending modes for this mirror.
+    """
     zk = fits.getdata(Path(bend_dir) / config['zk']['file'])
     grid = fits.getdata(Path(bend_dir) / config['grid']['file'])
     coords = fits.getdata(Path(bend_dir) / config['grid']['coords'])
@@ -205,6 +380,20 @@ def _load_mirror_bend(bend_dir, inds, config):
 
 @lru_cache(maxsize=4)
 def load_bend(bend_dir, inds):
+    """Load bending modes for all mirrors.
+
+    Parameters
+    ----------
+    bend_dir : str
+        Directory containing the bending mode files.
+    inds : list of int
+        List indicating the ordering of the bending modes to use.
+
+    Returns
+    -------
+    modes : dict
+        Dictionary of bending modes for each mirror.
+    """
     with open(Path(bend_dir) / "bend.yaml") as f:
         config = yaml.safe_load(f)
     m1 = _load_mirror_bend(bend_dir, inds, config['M1'])
@@ -215,6 +404,26 @@ def load_bend(bend_dir, inds):
 
 @lru_cache(maxsize=16*3)
 def realize_bend(bend_dir, dof, inds, mirror):
+    """Realize bending modes for a single mirror.
+
+    Applies given amount of bending of each mode to mirror.
+
+    Parameters
+    ----------
+    bend_dir : str
+        Directory containing the bending mode files.
+    dof : ndarray
+        Degrees of freedom for this mirror.
+    inds : list of int
+        List indicating the ordering of the bending modes to use.
+    mirror : str
+        Name of mirror.
+
+    Returns
+    -------
+    modes : RealizedBend
+        Realized bending modes for this mirror.
+    """
     modes = load_bend(bend_dir, inds)[mirror]
     dof = np.array(dof)
     zk = galsim.zernike.Zernike(
@@ -233,6 +442,22 @@ def realize_bend(bend_dir, dof, inds, mirror):
 
 @lru_cache(maxsize=16)
 def m2_gravity(fea_dir, zenith):
+    """Return M2 gravity displacement.
+
+    There are typically 15984 M2 FEA nodes.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    zenith : galsim.Angle
+        Zenith angle.
+
+    Returns
+    -------
+    dz : ndarray
+        M2 gravity displacement along z direction in meters for FEA nodes.
+    """
     data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     if zenith is None:
         return np.zeros_like(data[0])
@@ -248,6 +473,24 @@ def m2_gravity(fea_dir, zenith):
 
 @lru_cache(maxsize=16)
 def m2_temperature(fea_dir, TzGrad, TrGrad):
+    """Return M2 temperature displacement.
+
+    There are typically 15984 M2 FEA nodes.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    TzGrad : float
+        Temperature gradient in z direction in C / m (?)
+    TrGrad : float
+        Temperature gradient in r direction in C / m (?)
+
+    Returns
+    -------
+    dz : ndarray
+        M2 temperature displacement along z direction in meters for FEA nodes.
+    """
     data = _fits_cache(fea_dir, "M2_GT_FEA.fits.gz")
     tzdz, trdz = data[2:4]
 
@@ -260,6 +503,22 @@ def m2_temperature(fea_dir, TzGrad, TrGrad):
 
 @lru_cache(maxsize=16)
 def LSSTCam_gravity(fea_dir, zenith, rotation):
+    """Compute LSSTCam surface displacements due to gravity.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    zenith : galsim.Angle
+        Zenith angle.
+    rotation : galsim.Angle
+        Camera rotator angle.
+
+    Returns
+    -------
+    camera_gravity_zk : dict
+        Dictionary of Zernike coefficients for each camera surface.
+    """
     if zenith is None:
         return None
 
@@ -295,6 +554,20 @@ def LSSTCam_gravity(fea_dir, zenith, rotation):
 
 @lru_cache(maxsize=16)
 def LSSTCam_temperature(fea_dir, TBulk):
+    """Compute LSSTCam surface displacements due to temperature.
+
+    Parameters
+    ----------
+    fea_dir : str
+        Directory containing the FEA files.
+    TBulk : float
+        Camera temperature in C.
+
+    Returns
+    -------
+    camera_temperature_zk : dict
+        Dictionary of Zernike coefficients for each camera surface.
+    """
     camera_temperature_zk = {}
     cam_data = [
         ('L1S1', 'L1_entrance'),
