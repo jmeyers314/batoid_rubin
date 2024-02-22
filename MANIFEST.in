@@ -1,1 +1,8 @@
-recursive-include batoid_rubin/data/ *
+recursive-include batoid_rubin/data/ *.py
+global-exclude .gitignore
+prune tests
+prune notebooks
+prune validation
+prune scripts
+prune *.egg-info
+prune .github
