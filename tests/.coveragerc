@@ -1,0 +1,24 @@
+[run]
+branch = True
+source = batoid_rubin
+omit =
+    */tests/*
+    batoid_rubin/_version.py
+
+
+[report]
+# Regexes for lines to exclude from consideration
+exclude_lines =
+    # If you put this in a comment, you can manually exclude code from being covered.
+    pragma: no cover
+    # Don't complain if non-runnable code isn't run:
+    if False:
+    if 0:
+    if __name__ == .__main__.:
+
+    # Don't complain about exceptional circumstances not under control of the test suite
+    except .*KeyboardInterrupt
+    except .*OSError
+
+    # Don't complain if tests don't hit defensive assertion code:
+    raise NotImplementedError
