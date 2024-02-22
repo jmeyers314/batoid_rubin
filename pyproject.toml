@@ -4,7 +4,7 @@ authors = [
     {name = "Josh Meyers", email = "jmeyers314@gmail.com"},
 ]
 dependencies = [
-    "batoid",
+    "batoid", "requests"
 ]
 dynamic = ["version"]
 
