@@ -25,6 +25,8 @@ def test_builder():
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
         .with_m1m3_lut(zen, 0.0, 0)
         .with_extra_zk([0]*4+[1e-9], 0.61)
+        .with_camera_gravity(zen, rot)
+        .with_camera_temperature(0.2)
     )
 
     telescope = builder.build()
@@ -40,6 +42,8 @@ def test_builder():
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
         .with_m1m3_lut(zen, 0.0, 0)
         .with_extra_zk([0]*4+[1e-9], 0.61)
+        .with_camera_gravity(zen, rot)
+        .with_camera_temperature(0.2)
     )
     telescope2 = builder2.build()
     assert telescope == telescope2
@@ -55,6 +59,8 @@ def test_builder():
         .with_aos_dof(np.array([0]*19+[1]+[0]*30))
         .with_m1m3_lut(zen.rad, 0.0, 0)
         .with_extra_zk([0]*4+[1e-9], 0.61)
+        .with_camera_gravity(zen.rad, rot.rad)
+        .with_camera_temperature(0.2)
     )
     telescope3 = builder3.build()
     assert telescope == telescope3
@@ -207,6 +213,7 @@ def test_subsys_dof():
 
         np.testing.assert_allclose(builder1.dof, builder2.dof)
         np.testing.assert_allclose(builder1.dof, builder3.dof)
+        np.testing.assert_equal(len(builder1.dof), 10+len(use_m1m3_modes)+len(use_m2_modes))
 
 
 if __name__ == "__main__":
