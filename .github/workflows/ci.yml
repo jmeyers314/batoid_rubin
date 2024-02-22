@@ -19,15 +19,14 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest ]
-        py: ['3.10', 3.11]
+        py: ['3.10', '3.11', '3.12']
         include:
           - os: macos-latest
-            py: '3.10'
+            py: '3.12'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Print github context properties
         run: |
@@ -40,7 +39,7 @@ jobs:
           echo 'event.after: ${{ github.event.after }}'
 
       - name: Set up Python ${{ matrix.py }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.py }}
 
@@ -51,7 +50,7 @@ jobs:
             ~/.cache/pip
             $HOME/Library/Caches/Homebrew
             /usr/local/Cellar
-          key: ${{ runner.os }}-${{ matrix.py }}-${{ matrix.CXX}}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-${{ matrix.py }}-${{ matrix.CXX}}-pip
 
       - name: Install libfftw, etc. on linux (needed for GalSim)
         if: matrix.os == 'ubuntu-latest'
@@ -76,16 +75,25 @@ jobs:
 
       - name: Install test requirements
         run: |
-          pip install -U pytest
+          pip install -U pytest pytest-cov
 
       - name: List all installed packages for reference
         run: pip list
 
       - name: Build batoid_rubin
-        run: pip install .
+        run: pip install -e .
 
       - name: Run unit tests
-        run: pytest
+        run: pytest --cov=batoid_rubin --cov-report=xml --cov-config tests/.coveragerc
+
+      - name: Upload coverage to codecov
+        run: |
+          pwd -P
+          ls -rtlha
+          coverage combine || true  # (Not necessary I think, but just in case.)
+          coverage report
+          ls -la
+          bash <(curl -s https://codecov.io/bash)
 
       - name: Pre-cache cleanup
         continue-on-error: true
