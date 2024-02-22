@@ -5,14 +5,11 @@ authors = [
 ]
 dependencies = [
     "batoid",
-    "danish",
-    "ipywidgets",
-    "zenodo_get"
 ]
 dynamic = ["version"]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -20,5 +17,5 @@ packages = [
     "batoid_rubin",
 ]
 
-[tool.setuptools.dynamic]
-version = {attr = "batoid_rubin.__version__"}
+[tool.setuptools_scm]
+write_to = "batoid_rubin/_version.py"

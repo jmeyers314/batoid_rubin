@@ -4,3 +4,4 @@ batoid_rubin.egg-info
 build
 dist
 .DS_Store
+batoid_rubin/_version.py

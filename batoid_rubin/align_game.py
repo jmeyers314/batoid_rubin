@@ -349,7 +349,9 @@ class AlignGame:
         Rubin_obsc = yaml.safe_load(open(Path(danish.datadir)/'RubinObsc.yaml'))
         factory = danish.DonutFactory(
             R_outer=4.18, R_inner=2.5498,
-            obsc_radii=Rubin_obsc['radii'], obsc_motion=Rubin_obsc['motion'],
+            obsc_radii=Rubin_obsc['radii'],
+            obsc_centers=Rubin_obsc['centers'],
+            obsc_th_mins=Rubin_obsc['th_mins'],
             focal_length=10.31, pixel_scale=10e-6
         )
         sky_level = 1.0

@@ -1,12 +1,6 @@
-__version__ = "0.5"
-tmp = __version__
-if "rc" in tmp:  # pragma: no cover
-    tmp = tmp[:tmp.find("rc")]
-__version_info__ = tuple(map(int, tmp.split('.')))
+from ._version import __version__, __version_tuple__
 
 from .builder import *
-from .visualize import *
-from .align_game import AlignGame
 
 from pathlib import Path
 datadir = Path(__file__).parent / "data"
