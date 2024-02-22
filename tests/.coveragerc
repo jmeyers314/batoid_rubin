@@ -4,7 +4,8 @@ source = batoid_rubin
 omit =
     */tests/*
     batoid_rubin/_version.py
-
+    batoid_rubin/visualize.py
+    batoid_rubin/align_game.py
 
 [report]
 # Regexes for lines to exclude from consideration
