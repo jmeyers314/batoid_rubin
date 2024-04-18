@@ -73,7 +73,7 @@ class Sensor:
         self.img.set_array(psf/np.max(psf))
 
 
-class ComCamAlignGame:
+class ComCamAOS:
     def __init__(
         self,
         debug=None,
