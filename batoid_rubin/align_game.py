@@ -22,7 +22,6 @@ class Raft:
         self.img = img
         self.fiducial = fiducial
         self.wavelength = wavelength
-
         self.bins = img.get_array().shape[0]
         bo2 = self.bins//2
         self.range = [[-bo2*10e-6, bo2*10e-6], [-bo2*10e-6, bo2*10e-6]]
@@ -98,12 +97,8 @@ class AlignGame:
         self.rng = rng
         self.offset_rng = np.random.default_rng(rng.integers(2**63))
 
-        self.fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
-        self.builder = batoid_rubin.LSSTBuilder(
-            self.fiducial,
-            fea_dir="fea_legacy",
-            bend_dir="bend_legacy"
-        )
+        self.fiducial = batoid.Optic.fromYaml("LSST_r_align_holes.yaml")
+        self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
         self.wavelength = 500e-9
 
         # widget variables
@@ -279,14 +274,17 @@ class AlignGame:
         self.update()
 
     def control_truncated(self, b):
-        # Don't use M2 tilt or camera piston.
         dz_fit = self.fit_dz()
         sens = np.array(self.sens)
-        sens = sens[:, [0,1,2,6,7,8,9]]
+
+        # Don't use M2 tilt or camera piston.
+        indices = [0,1,2,6,7,8,9]
+
+        sens = sens[:, indices]
         dof_fit, _, _, _ = lstsq(sens, dz_fit)
         dof_fit = np.round(dof_fit, 2)
         full_dof = np.zeros(10)
-        full_dof[[0,1,2,6,7,8,9]] = dof_fit
+        full_dof[indices] = dof_fit
         self.apply_dof(-full_dof)
         self._plot_control_history()
 
@@ -346,12 +344,10 @@ class AlignGame:
 
     def fit_dz(self):
         # Wavefront estimation part of the control loop.
-        Rubin_obsc = yaml.safe_load(open(Path(danish.datadir)/'RubinObsc.yaml'))
+        Rubin_mask_params = yaml.safe_load(open(Path(danish.datadir)/'RubinObsc.yaml'))
         factory = danish.DonutFactory(
             R_outer=4.18, R_inner=2.5498,
-            obsc_radii=Rubin_obsc['radii'],
-            obsc_centers=Rubin_obsc['centers'],
-            obsc_th_mins=Rubin_obsc['th_mins'],
+            mask_params=Rubin_mask_params,
             focal_length=10.31, pixel_scale=10e-6
         )
         sky_level = 1.0
@@ -382,7 +378,8 @@ class AlignGame:
             thxs.append(np.deg2rad(raft.thx))
             thys.append(np.deg2rad(raft.thy))
             z_refs.append(raft.z_ref)
-            imgs.append(raft.img.get_array().data[::-1, ::-1])
+            # imgs.append(raft.img.get_array().data[::-1, ::-1])
+            imgs.append(raft.img.get_array().data)
             names.append(raft.name)
 
         fitter = danish.MultiDonutModel(
@@ -494,13 +491,13 @@ class AlignGame:
 
     def _view(self):
         self._fig = fig = plt.figure(constrained_layout=True, figsize=(5, 5))
-        raftspec = [[  None, "in04",  None,  None,  None,   None,   None],
-                    [  None, "ex04", "R14", "R24", "R34", "ex44", "in44"],
-                    [  None,  "R03", "R13", "R23", "R33",  "R43",   None],
-                    [  None,  "R02", "R12", "R22", "R32",  "R42",   None],
+        raftspec = [[  None,   None,  None,  None,  None, "in40",   None],
+                    ["in00", "ex00", "R10", "R20", "R30", "ex40",   None],
                     [  None,  "R01", "R11", "R21", "R31",  "R41",   None],
-                    ["in00", "ex00", "R00", "R10", "R20", "ex40",   None],
-                    [  None,   None,  None,  None,  None, "in40",   None]]
+                    [  None,  "R02", "R12", "R22", "R32",  "R42",   None],
+                    [  None,  "R03", "R13", "R23", "R33",  "R43",   None],
+                    [  None, "ex04", "R14", "R24", "R34", "ex44", "in44"],
+                    [  None, "in04",  None,  None,  None,   None,   None]]
         self._axes = fig.subplot_mosaic(
             raftspec, empty_sentinel=None
         )
@@ -521,31 +518,31 @@ class AlignGame:
             if "R" in k:
                 nphot = 1000
                 nx = 21
-                thx=(x-center[0])*factor
+                thx=-(x-center[0])*factor
                 thy=(y-center[1])*factor
             else:
                 nphot = 50000
                 nx = 181
             # Redo WF centering
             if k == "in00":
-                thx, thy = -5.25*3.5/15, -5*3.5/15
+                thx, thy = -5*3.5/15, -5.25*3.5/15
             elif k == "ex00":
-                thx, thy = -4.75*3.5/15, -5*3.5/15
+                thx, thy = -5*3.5/15, -4.75*3.5/15
 
             elif k == "in04":
-                thx, thy = -5*3.5/15, 5.25*3.5/15
+                thx, thy = -5.25*3.5/15, 5*3.5/15
             elif k == "ex04":
-                thx, thy = -5*3.5/15, 4.75*3.5/15
+                thx, thy = -4.75*3.5/15, 5*3.5/15
 
             elif k == "in40":
-                thx, thy = 5*3.5/15, -5.25*3.5/15
+                thx, thy = 5.25*3.5/15, -5*3.5/15
             elif k == "ex40":
-                thx, thy = 5*3.5/15, -4.75*3.5/15
+                thx, thy = 4.75*3.5/15, -5*3.5/15
 
             elif k == "in44":
-                thx, thy = 5.25*3.5/15, 5*3.5/15
+                thx, thy = 5*3.5/15, 5.25*3.5/15
             elif k == "ex44":
-                thx, thy = 4.75*3.5/15, 5*3.5/15
+                thx, thy = 5*3.5/15, 4.75*3.5/15
 
             self._rafts[k] = Raft(
                 k, thx, thy, nphot=nphot, fiducial=self.fiducial,
@@ -554,11 +551,8 @@ class AlignGame:
 
             ax.text(0.02, 0.87, k, transform=ax.transAxes, fontsize=6, color='white')
 
-        # self._axes["in04"].text(0.05, 0.9, "InR04", transform=self._axes["in04"].transAxes, fontsize=6, color='white')
-        # self._axes["ex04"].text(0.05, 0.9, "ExR04", transform=self._axes["ex04"].transAxes, fontsize=6, color='white')
-
-        self.wfe_text = fig.text(0.31, 0.89, "WFE", ha="left", va="center", fontsize=16)
-        self.win_text = fig.text(0.31, 0.96, "", ha="left", va="center", fontsize=16, color='red')
+        self.wfe_text = fig.text(0.04, 0.89, "WFE", ha="left", va="center", fontsize=16)
+        self.win_text = fig.text(0.04, 0.96, "", ha="left", va="center", fontsize=16, color='red')
 
         self._canvas = fig.canvas
         self._canvas.header_visible = False
