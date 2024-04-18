@@ -6,6 +6,7 @@ import yaml
 import batoid
 import batoid_rubin
 import danish
+import galsim
 import ipywidgets
 import matplotlib.pyplot as plt
 import numpy as np
@@ -188,7 +189,7 @@ class ComCamAOS:
         self.m2_control_box1 = ipywidgets.VBox(self.m2_controls[:10])
         self.m2_control_box2 = ipywidgets.VBox(self.m2_controls[10:])
 
-        self.component_controls = ipywidgets.Tab(layout=ipywidgets.Layout(min_width="200pt", height="290pt"))
+        self.component_controls = ipywidgets.Tab(layout=ipywidgets.Layout(min_width="240pt", height="290pt"))
         self.component_controls.children = [
             self.hex_controls,
             self.m1m3_control_box1, self.m1m3_control_box2,
@@ -321,9 +322,12 @@ class ComCamAOS:
         ndz = len(dz_fit)
         sens = np.zeros((ndz+len(self.controlled_dof), len(self.controlled_dof)))
         sens[:ndz, :] = self.sens[:, self.controlled_dof]
+        penalty = 1./np.array(self.amp)
+        # Let's increase the penalty for the mirrors
+        penalty[10:] *= 10
         alpha = 1e-10 # overall strength of penalty
         for i in range(ndz, ndz+len(self.controlled_dof)):
-            sens[i, i-ndz] = alpha/self.amp[self.controlled_dof[i-ndz]]
+            sens[i, i-ndz] = alpha*penalty[self.controlled_dof[i-ndz]]
         dof_fit, _, _, _ = lstsq(sens, np.concatenate([dz_fit, [0]*len(self.controlled_dof)]))
         dof_fit = np.round(dof_fit, 3)
         full_dof = np.zeros(50)
@@ -549,7 +553,7 @@ class ComCamAOS:
             wf_out = ipywidgets.Output()
 
             with intra_out:
-                self._intra_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
+                self._intra_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._intra_axes = self._intra_fig.subplot_mosaic(sensspec)
                 # Determine spacing
                 center = (self._intra_axes["S11"].transAxes + self._intra_fig.transFigure.inverted()).transform([0.5, 0.5])
@@ -557,13 +561,13 @@ class ComCamAOS:
                 dx = s01[0] - center[0]  # make this 0.25 degrees
                 factor = 0.25/dx
             with focal_out:
-                self._focal_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
+                self._focal_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._focal_axes = self._focal_fig.subplot_mosaic(sensspec)
             with extra_out:
-                self._extra_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
+                self._extra_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._extra_axes = self._extra_fig.subplot_mosaic(sensspec)
             with wf_out:
-                self._wf_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
+                self._wf_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._wf_axes = self._wf_fig.subplot_mosaic(sensspec)
 
         self._sensors = {}
@@ -624,13 +628,20 @@ class ComCamAOS:
             self._wf_canvas.header_visible = False
             self._wf_fig.show()
 
-        out = ipywidgets.Tab()
+        plot_out = ipywidgets.Tab()
 
-        out.children = [intra_out, focal_out, extra_out, wf_out]
-        out.set_title(0, "Intra")
-        out.set_title(1, "Focal")
-        out.set_title(2, "Extra")
-        out.set_title(3, "WF")
+        plot_out.children = [intra_out, focal_out, extra_out, wf_out]
+        plot_out.set_title(0, "Intra")
+        plot_out.set_title(1, "Focal")
+        plot_out.set_title(2, "Extra")
+        plot_out.set_title(3, "WF")
+
+        self.text = ""
+        self.textout = ipywidgets.Textarea(
+            value=self.text,
+            layout={'height': '65px', 'width': '100%'}
+        )
+        out = ipywidgets.VBox([plot_out, self.textout])
 
         return out
 
@@ -654,12 +665,21 @@ class ComCamAOS:
         self.wfe = np.sqrt(np.sum(np.square(self.dz[:, 4:])))
         self.wfe *= 500e-9*1e6  # microns
 
+        fwhms = []
         for sensor in self._sensors.values():
             sensor.draw(telescope, seeing=0.5, rng=self.rng)
             sensor.draw_wf(telescope)
+            if sensor.focusz == 0.0:
+                img = galsim.Image(sensor.img.get_array().data)
+                mom = galsim.hsm.FindAdaptiveMom(img)
+                fwhms.append(mom.moments_sigma*2.355*0.2)
         self._intra_canvas.draw_idle()
         self._focal_canvas.draw_idle()
         self._extra_canvas.draw_idle()
+
+        self.text = f"WFE: {self.wfe:.2f} µm\n"
+        self.text += f"FWHM: {np.median(fwhms):.2f} arcsec"
+        self.textout.value = self.text
 
         self._pause_handler = True
         self.m2_dz_control.value = self.m2_dz
