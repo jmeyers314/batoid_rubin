@@ -14,7 +14,7 @@ from scipy.optimize import least_squares
 
 
 class Sensor:
-    def __init__(self, name, thx, thy, nphot, img, fiducial, focusz=0.0, wavelength=500e-9):
+    def __init__(self, name, thx, thy, nphot, img, fiducial, focusz=0.0, wavelength=500e-9, wf_img=None):
         self.name = name
         self.thx = thx
         self.thy = thy
@@ -23,6 +23,7 @@ class Sensor:
         self.fiducial = fiducial
         self.focusz = focusz
         self.wavelength = wavelength
+        self.wf_img = wf_img
         self.bins = img.get_array().shape[0]
         bo2 = self.bins//2
         self.range = [[-bo2*10e-6, bo2*10e-6], [-bo2*10e-6, bo2*10e-6]]
@@ -71,6 +72,20 @@ class Sensor:
             range=self.range
         )
         self.img.set_array(psf/np.max(psf))
+
+    def draw_wf(self, telescope):
+        if self.wf_img is None:
+            return
+        telescope = telescope.withGloballyShiftedOptic(
+            "Detector", [0, 0, self.focusz]
+        )
+        wf = batoid.wavefront(
+            telescope, np.deg2rad(self.thx), np.deg2rad(self.thy),
+            self.wavelength, reference='mean',
+            nx=127
+        ).array
+        wf *= self.wavelength * 1e6 / 2.0  # +/-2 microns range
+        self.wf_img.set_array(wf)
 
 
 class ComCamAOS:
@@ -531,6 +546,7 @@ class ComCamAOS:
             intra_out = ipywidgets.Output()
             focal_out = ipywidgets.Output()
             extra_out = ipywidgets.Output()
+            wf_out = ipywidgets.Output()
 
             with intra_out:
                 self._intra_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
@@ -546,11 +562,15 @@ class ComCamAOS:
             with extra_out:
                 self._extra_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
                 self._extra_axes = self._extra_fig.subplot_mosaic(sensspec)
+            with wf_out:
+                self._wf_fig = plt.figure(constrained_layout=True, figsize=(4, 4))
+                self._wf_axes = self._wf_fig.subplot_mosaic(sensspec)
 
         self._sensors = {}
-        for fig, axes, focusz, prefix, ctx in zip(
+        for fig, axes, wf_axes, focusz, prefix, ctx in zip(
             [self._intra_fig, self._focal_fig, self._extra_fig],
             [self._intra_axes, self._focal_axes, self._extra_axes],
+            [None, self._wf_axes, None],
             [-1.5e-3, 0.0, 1.5e-3],
             ["in", "foc", "ex"],
             [intra_out, focal_out, extra_out]
@@ -558,6 +578,8 @@ class ComCamAOS:
             with contextlib.ExitStack() as stack:
                 stack.enter_context(ctx)
                 for k, ax in axes.items():
+                    if wf_axes is not None:
+                        wf_ax = wf_axes[k]
                     ax.set_xticks([])
                     ax.set_yticks([])
 
@@ -566,21 +588,24 @@ class ComCamAOS:
                     if focusz == 0.0:
                         nphot = 1000
                         nx = 21
+                        wf_img = wf_ax.imshow(np.zeros((127, 127)), vmin=-1, vmax=1, cmap='bwr')
+                        wf_ax.set_xticks([])
+                        wf_ax.set_yticks([])
                     else:
                         nphot = 50000
                         nx = 181
+                        wf_img = None
                     thx=-(x-center[0])*factor
                     thy=(y-center[1])*factor
 
                     self._sensors[prefix+k] = Sensor(
                         prefix+k, thx, thy, nphot=nphot, fiducial=self.fiducial,
                         focusz=focusz,
-                        img=ax.imshow(np.zeros((nx, nx)), vmin=0, vmax=1)
+                        img=ax.imshow(np.zeros((nx, nx)), vmin=0, vmax=1),
+                        wf_img=wf_img
                     )
 
                     ax.text(0.02, 0.92, k, transform=ax.transAxes, fontsize=6, color='white')
-
-        # self.wfe_text = fig.text(0.04, 0.89, "WFE", ha="left", va="center", fontsize=16)
 
         with intra_out:
             self._intra_canvas = self._intra_fig.canvas
@@ -594,13 +619,18 @@ class ComCamAOS:
             self._extra_canvas = self._extra_fig.canvas
             self._extra_canvas.header_visible = False
             self._extra_fig.show()
+        with wf_out:
+            self._wf_canvas = self._wf_fig.canvas
+            self._wf_canvas.header_visible = False
+            self._wf_fig.show()
 
         out = ipywidgets.Tab()
 
-        out.children = [intra_out, focal_out, extra_out]
+        out.children = [intra_out, focal_out, extra_out, wf_out]
         out.set_title(0, "Intra")
         out.set_title(1, "Focal")
         out.set_title(2, "Extra")
+        out.set_title(3, "WF")
 
         return out
 
@@ -626,10 +656,10 @@ class ComCamAOS:
 
         for sensor in self._sensors.values():
             sensor.draw(telescope, seeing=0.5, rng=self.rng)
+            sensor.draw_wf(telescope)
         self._intra_canvas.draw_idle()
         self._focal_canvas.draw_idle()
         self._extra_canvas.draw_idle()
-        # self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm")
 
         self._pause_handler = True
         self.m2_dz_control.value = self.m2_dz
@@ -647,6 +677,8 @@ class ComCamAOS:
         for i, val in enumerate(self.m2_vals):
             self.m2_controls[i].value = val
         self._pause_handler = False
+
+
 
     def display(self):
         from IPython.display import display
