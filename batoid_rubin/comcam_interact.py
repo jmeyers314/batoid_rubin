@@ -84,7 +84,6 @@ class ComCamAOS:
         controlled_dof=list(range(10)),
         controlled_truncated_dof=[0,1,2,6,7,8,9],
         dz_terms = ((1, 4), (2, 4), (3, 4), (2, 5), (3, 5), (2, 6), (3, 6), (1, 7), (1, 8)),
-        alpha=1e-12
     ):
         batoid._batoid.set_nthreads(nthread)
 
@@ -111,11 +110,15 @@ class ComCamAOS:
         self.controlled_truncated_dof = controlled_truncated_dof
 
         self.dz_terms = dz_terms
-        self.alpha = alpha
 
         self.fiducial = batoid.Optic.fromYaml("ComCam_r.yaml")
         self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
         self.wavelength = 500e-9
+
+        # Relative magnitude of perturbations in arcsec/micron
+        self.amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
+        self.amp += [0.1]*20
+        self.amp += [0.1]*20
 
         # widget variables
         self.m2_dz = 0.0
@@ -130,12 +133,8 @@ class ComCamAOS:
         self.cam_Rx = 0.0
         self.cam_Ry = 0.0
 
-        self.offsets = np.zeros_like(self.randomized_dof)
-        self.text = ""
-        self._n_iter = 0
-
         # Controls
-        kwargs = {'layout':{'width':'180px'}, 'style':{'description_width':'initial'}}
+        kwargs = {'layout':{'width':'180px'}, 'style':{'description_width':'initial'}, 'format':'.3f'}
         self.m2_dz_control = ipywidgets.FloatText(value=self.m2_dz, description="M2 dz (µm)", step=10, **kwargs)
         self.m2_dx_control = ipywidgets.FloatText(value=self.m2_dx, description="M2 dx (µm)", step=500, **kwargs)
         self.m2_dy_control = ipywidgets.FloatText(value=self.m2_dy, description="M2 dy (µm)", step=500, **kwargs)
@@ -148,8 +147,6 @@ class ComCamAOS:
         self.cam_Ry_control = ipywidgets.FloatText(value=self.cam_Ry, description="Cam Ry (arcsec)", step=10, **kwargs)
         self.zero_control = ipywidgets.Button(description="Zero")
         self.randomize_control = ipywidgets.Button(description="Randomize")
-        self.reveal_control = ipywidgets.Button(description="Reveal")
-        self.solve_control = ipywidgets.Button(description="Solve")
         self.control_truncated_control = ipywidgets.Button(description="Control w/ Trunc")
         self.control_penalty_control = ipywidgets.Button(description="Control w/ Penalty")
 
@@ -192,7 +189,6 @@ class ComCamAOS:
             self.component_controls,
             ipywidgets.VBox([
                 self.zero_control, self.randomize_control,
-                self.reveal_control, self.solve_control,
                 self.control_truncated_control, self.control_penalty_control
             ])
         ])
@@ -213,18 +209,11 @@ class ComCamAOS:
             self.m2_controls[i].observe(lambda change, i=i: self.handle_event(change, ('m2_vals', i)), 'value')
         self.zero_control.on_click(self.zero)
         self.randomize_control.on_click(self.randomize)
-        self.reveal_control.on_click(self.reveal)
-        self.solve_control.on_click(self.solve)
         self.control_truncated_control.on_click(self.control_truncated)
         self.control_penalty_control.on_click(self.control_penalty)
 
         self.view = self._view()
-        self.textout = ipywidgets.Textarea(
-            value=self.text,
-            layout=ipywidgets.Layout(height="250pt", width="auto")
-        )
         self._pause_handler = False
-        self._is_playing = False
         self._control_history = []
 
     def zero(self, b):
@@ -240,10 +229,6 @@ class ComCamAOS:
         self.cam_Ry = 0.0
         self.m1m3_vals = [0.0]*20
         self.m2_vals = [0.0]*20
-        self.offsets = np.zeros_like(self.randomized_dof)
-        self.text = 'Values Zeroed!'
-        self._is_playing = False
-        self._n_iter = 0
         self.update()
         self._control_history = []
         self._control_history.append(
@@ -266,27 +251,22 @@ class ComCamAOS:
 
     def randomize(self, b):
         # amplitudes for all 50 dof
-        amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
-        amp += [0.1]*20
-        amp += [0.2]*20
-        offsets = self.offset_rng.normal(scale=amp)[self.randomized_dof]
-        self.offsets = np.round(offsets, 2)
+        offsets = np.zeros(50)
+        offsets[self.randomized_dof] = self.offset_rng.normal(scale=self.amp)[self.randomized_dof]
+        offsets = np.round(offsets, 3)
 
-        self.m2_dz = 0.0
-        self.m2_dx = 0.0
-        self.m2_dy = 0.0
-        self.m2_Rx = 0.0
-        self.m2_Ry = 0.0
-        self.cam_dz = 0.0
-        self.cam_dx = 0.0
-        self.cam_dy = 0.0
-        self.cam_Rx = 0.0
-        self.cam_Ry = 0.0
-        self.m1m3_vals = [0.0]*20
-        self.m2_vals = [0.0]*20
-        self.text = 'Values Randomized!'
-        self._is_playing = True
-        self._n_iter = 0
+        self.m2_dz = offsets[0]
+        self.m2_dx = offsets[1]
+        self.m2_dy = offsets[2]
+        self.m2_Rx = offsets[3]
+        self.m2_Ry = offsets[4]
+        self.cam_dz = offsets[5]
+        self.cam_dx = offsets[6]
+        self.cam_dy = offsets[7]
+        self.cam_Rx = offsets[8]
+        self.cam_Ry = offsets[9]
+        self.m1m3_vals = list(offsets[10:30])
+        self.m2_vals = list(offsets[30:50])
         self.update()
         self._control_history = []
         self._control_history.append(
@@ -307,65 +287,6 @@ class ComCamAOS:
             )
         )
 
-    def reveal(self, b):
-        self.text = ""
-        self.text += f"M2 dz: {self.offsets[0]:.2f} µm\n\n"
-        self.text += f"M2 dx: {self.offsets[1]:.2f} µm\n\n"
-        self.text += f"M2 dy: {self.offsets[2]:.2f} µm\n\n"
-        self.text += f"M2 Rx: {self.offsets[3]:.2f} arcsec\n\n"
-        self.text += f"M2 Ry: {self.offsets[4]:.2f} arcsec\n\n"
-        self.text += f"Cam dz: {self.offsets[5]:.2f} µm\n\n"
-        self.text += f"Cam dx: {self.offsets[6]:.2f} µm\n\n"
-        self.text += f"Cam dy: {self.offsets[7]:.2f} µm\n\n"
-        self.text += f"Cam Rx: {self.offsets[8]:.2f} arcsec\n\n"
-        self.text += f"Cam Ry: {self.offsets[9]:.2f} arcsec\n\n"
-        self._is_playing = False
-        self.update()
-
-    def solve(self, b):
-        self._is_playing = False
-        self.m2_dz = 0.0
-        self.m2_dx = 0.0
-        self.m2_dy = 0.0
-        self.m2_Rx = 0.0
-        self.m2_Ry = 0.0
-        self.cam_dz = 0.0
-        self.cam_dx = 0.0
-        self.cam_dy = 0.0
-        self.cam_Rx = 0.0
-        self.cam_Ry = 0.0
-        self.m1m3_vals = [0.0]*20
-        self.m2_vals = [0.0]*20
-
-        for idof, offset in zip(self.controlled_dof, self.offsets):
-            match idof:
-                case 0:
-                    self.m2_dz = -offset
-                case 1:
-                    self.m2_dx = -offset
-                case 2:
-                    self.m2_dy = -offset
-                case 3:
-                    self.m2_Rx = -offset
-                case 4:
-                    self.m2_Ry = -offset
-                case 5:
-                    self.cam_dz = -offset
-                case 6:
-                    self.cam_dx = -offset
-                case 7:
-                    self.cam_dy = -offset
-                case 8:
-                    self.cam_Rx = -offset
-                case 9:
-                    self.cam_Ry = -offset
-                case idof if idof in range(10, 30):
-                    self.m1m3_vals[idof-10] = -offset
-                case idof if idof in range(30, 50):
-                    self.m2_vals[idof-30] = -offset
-        self.reveal(None)
-        self.update()
-
     def control_truncated(self, b):
         dz_fit = self.fit_dz()
         sens = np.array(self.sens)
@@ -373,26 +294,23 @@ class ComCamAOS:
         # Don't use M2 tilt or camera piston.
         sens = sens[:, self.controlled_truncated_dof]
         dof_fit, _, _, _ = lstsq(sens, dz_fit)
-        dof_fit = np.round(dof_fit, 2)
+        dof_fit = np.round(dof_fit, 3)
         full_dof = np.zeros(50)
         full_dof[self.controlled_truncated_dof] = dof_fit
         self.apply_dof(-full_dof)
         self._plot_control_history()
 
     def control_penalty(self, b):
-        amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
-        amp += [0.1]*20
-        amp += [0.2]*20
         # Add rows to sens matrix to penalize large dof
         dz_fit = self.fit_dz()
         ndz = len(dz_fit)
         sens = np.zeros((ndz+len(self.controlled_dof), len(self.controlled_dof)))
         sens[:ndz, :] = self.sens[:, self.controlled_dof]
-        alpha = self.alpha # strength of penalty
+        alpha = 1e-10 # overall strength of penalty
         for i in range(ndz, ndz+len(self.controlled_dof)):
-            sens[i, i-ndz] = alpha/amp[self.controlled_dof[i-ndz]]
+            sens[i, i-ndz] = alpha/self.amp[self.controlled_dof[i-ndz]]
         dof_fit, _, _, _ = lstsq(sens, np.concatenate([dz_fit, [0]*len(self.controlled_dof)]))
-        dof_fit = np.round(dof_fit, 2)
+        dof_fit = np.round(dof_fit, 3)
         full_dof = np.zeros(50)
         full_dof[self.controlled_dof] = dof_fit
         with self.debug:
@@ -539,9 +457,6 @@ class ComCamAOS:
 
     @cached_property
     def sens(self):
-        amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
-        amp += [0.1]*20
-        amp += [0.2]*20
         dz_terms = self.dz_terms
         ndz = len(dz_terms)
         sens = np.zeros((ndz, 50))
@@ -553,7 +468,7 @@ class ComCamAOS:
         )*self.wavelength
         for idof in range(50):
             dof = np.zeros(50)
-            dof[idof] = amp[idof]  # microns or arcsec
+            dof[idof] = self.amp[idof]  # microns or arcsec
             builder = self.builder.with_aos_dof(dof.tolist())
             telescope = builder.build()
             dz_p = batoid.doubleZernike(
@@ -561,7 +476,7 @@ class ComCamAOS:
                 jmax=jmax, kmax=kmax, eps=0.61
             )*self.wavelength
             for i, (k, j) in enumerate(dz_terms):
-                sens[i, idof] = (dz_p - dz_ref)[k, j]/amp[idof]
+                sens[i, idof] = (dz_p - dz_ref)[k, j]/self.amp[idof]
         return sens
 
     def apply_dof(self, dof):
@@ -582,7 +497,6 @@ class ComCamAOS:
                 print(f"M1M3 mode {i}: {dof[10+i]:10.2f} µm")
             for i in range(20):
                 print(f"M2 mode {i}: {dof[30+i]:10.2f} µm")
-        self._is_playing = False
         self.m2_dz += dof[0]
         self.m2_dx += dof[1]
         self.m2_dy += dof[2]
@@ -606,8 +520,6 @@ class ComCamAOS:
             setattr(self, attr[0], current)
         else:
             setattr(self, attr, change['new'])
-        if self._is_playing:
-            self._n_iter += 1
         self.update()
 
     def _view(self):
@@ -697,9 +609,6 @@ class ComCamAOS:
         dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
         dof += self.m1m3_vals
         dof += self.m2_vals
-        dof = np.array(dof)
-        dof[self.randomized_dof] += self.offsets
-        dof = dof.tolist()
 
         builder = self.builder.with_aos_dof(dof)
         telescope = builder.build()
@@ -720,13 +629,7 @@ class ComCamAOS:
         self._intra_canvas.draw_idle()
         self._focal_canvas.draw_idle()
         self._extra_canvas.draw_idle()
-        # self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm   iter: {self._n_iter}")
-        # if self._is_playing:
-        #     if self.wfe < 0.5:
-                # self.win_text.set_text("You Win!")
-                # self._is_playing = False
-
-        self.textout.value = self.text
+        # self.wfe_text.set_text(f"WFE = {self.wfe:.3f} µm")
 
         self._pause_handler = True
         self.m2_dz_control.value = self.m2_dz
@@ -750,7 +653,6 @@ class ComCamAOS:
         self.app = ipywidgets.HBox([
             self.view,
             self.controls,
-            self.textout
         ])
 
         self.update()
