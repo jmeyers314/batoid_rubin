@@ -165,6 +165,7 @@ class ComCamAOS:
         self.randomize_control = ipywidgets.Button(description="Randomize")
         self.control_truncated_control = ipywidgets.Button(description="Control w/ Trunc")
         self.control_penalty_control = ipywidgets.Button(description="Control w/ Penalty")
+        self.control_ofc_control = ipywidgets.Button(description="Control w/ OFC")
 
         self.hex_controls = ipywidgets.VBox([
             self.m2_dz_control, self.m2_dx_control, self.m2_dy_control,
@@ -205,7 +206,7 @@ class ComCamAOS:
             self.component_controls,
             ipywidgets.VBox([
                 self.zero_control, self.randomize_control,
-                self.control_truncated_control, self.control_penalty_control
+                self.control_truncated_control, self.control_penalty_control, self.control_ofc_control
             ])
         ])
 
@@ -227,6 +228,7 @@ class ComCamAOS:
         self.randomize_control.on_click(self.randomize)
         self.control_truncated_control.on_click(self.control_truncated)
         self.control_penalty_control.on_click(self.control_penalty)
+        self.control_ofc_control.on_click(self.control_ofc)
 
         self.view = self._view()
         self._pause_handler = False
@@ -332,15 +334,45 @@ class ComCamAOS:
         dof_fit = np.round(dof_fit, 3)
         full_dof = np.zeros(50)
         full_dof[self.controlled_dof] = dof_fit
-        with self.debug:
-            print(f"{dz_fit.shape = }")
-            print(f"{sens.shape = }")
-            print(f"{dof_fit.shape = }")
-            print(f"{full_dof.shape = }")
-            print(f"WFE resids = {sens[:ndz] @ dof_fit - dz_fit}")
-            print(f"penalty = {sens[ndz:] @ dof_fit}")
+        # with self.debug:
+        #     print(f"WFE resids = {sens[:ndz] @ dof_fit - dz_fit}")
+        #     print(f"penalty = {sens[ndz:] @ dof_fit}")
 
         self.apply_dof(-full_dof)
+        self._plot_control_history()
+
+    def control_ofc(self, b):
+        from lsst.ts.ofc import OFCData, OFC
+        ofc_data = OFCData("comcam")
+
+        js = np.unique([j for k, j in self.dz_terms])
+        maxk = max([k for k, j in self.dz_terms])
+        maxj = max(js)
+        ofc_data.zn_selected = js
+        ofc = OFC(ofc_data)
+
+        dz_fit = self.fit_dz()
+        coefs = np.zeros((maxk+1, maxj+1))
+        for (k, j), val in zip(self.dz_terms, dz_fit):
+            coefs[k, j] = val * 1e6
+        dz = galsim.zernike.DoubleZernike(
+            coefs, uv_outer=0.4, xy_outer=4.18, xy_inner=2.5498
+        )
+
+        wfe = []
+        sensor_names = []
+        for k, sensor in self._sensors.items():
+            if sensor.focusz == 0.0:
+                wfe.append(dz(sensor.thx, sensor.thy).coef[4:])
+                sensor_names.append(k.replace("foc", "R22_"))
+        corrections = ofc.calculate_corrections(
+            np.array(wfe),
+            sensor_names,
+            "R",
+            1.0,
+            0.0
+        )
+        self.apply_dof(ofc.ofc_controller.dof_state)
         self._plot_control_history()
 
     def _plot_control_history(self):
@@ -470,7 +502,7 @@ class ComCamAOS:
             print()
             print("Found double Zernikes:")
             for z_term, val in zip(dz_terms, dz_fit):
-                print(f"DZ({z_term[0]}, {z_term[1]}): {val*1e9:10.2f} nm")
+                print(f"DZ({z_term[0]:2d}, {z_term[1]:2d}): {val*1e9:10.2f} nm")
 
         return dz_fit
 
@@ -499,23 +531,24 @@ class ComCamAOS:
         return sens
 
     def apply_dof(self, dof):
+        dof = np.round(dof, 3)
         with self.control_log:
             print()
             print("Applying DOF:")
-            print(f"M2 dz:  {dof[0]:10.2f} µm")
-            print(f"M2 dx:  {dof[1]:10.2f} µm")
-            print(f"M2 dy:  {dof[2]:10.2f} µm")
-            print(f"M2 Rx:  {dof[3]:10.2f} arcsec")
-            print(f"M2 Ry:  {dof[4]:10.2f} arcsec")
-            print(f"cam dz: {dof[5]:10.2f} µm")
-            print(f"cam dx: {dof[6]:10.2f} µm")
-            print(f"cam dy: {dof[7]:10.2f} µm")
-            print(f"cam Rx: {dof[8]:10.2f} arcsec")
-            print(f"cam Ry: {dof[9]:10.2f} arcsec")
+            print(f"M2 dz:        {dof[0]:10.2f} µm")
+            print(f"M2 dx:        {dof[1]:10.2f} µm")
+            print(f"M2 dy:        {dof[2]:10.2f} µm")
+            print(f"M2 Rx:        {dof[3]:10.2f} arcsec")
+            print(f"M2 Ry:        {dof[4]:10.2f} arcsec")
+            print(f"cam dz:       {dof[5]:10.2f} µm")
+            print(f"cam dx:       {dof[6]:10.2f} µm")
+            print(f"cam dy:       {dof[7]:10.2f} µm")
+            print(f"cam Rx:       {dof[8]:10.2f} arcsec")
+            print(f"cam Ry:       {dof[9]:10.2f} arcsec")
             for i in range(20):
-                print(f"M1M3 mode {i}: {dof[10+i]:10.2f} µm")
+                print(f"M1M3 mode {i:2d}: {dof[10+i]:10.2f} µm")
             for i in range(20):
-                print(f"M2 mode {i}: {dof[30+i]:10.2f} µm")
+                print(f"M2 mode   {i:2d}: {dof[30+i]:10.2f} µm")
         self.m2_dz += dof[0]
         self.m2_dx += dof[1]
         self.m2_dy += dof[2]
