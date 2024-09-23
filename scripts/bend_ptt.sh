@@ -1,7 +1,7 @@
 # Generate bending modes by matching previously determined bending mode forces to
 # the unit load cases.  Subtract PTT individually from M1, M2, and M3.
 
-NASTRAN_DIR=/Users/josh/src/ZEMAX_FEMAP
+NASTRAN_DIR=${HOME}/src/ZEMAX_FEMAP
 OUT_DIR=bend_ptt
 
 [ ! -d $OUT_DIR ] && mkdir $OUT_DIR

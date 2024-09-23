@@ -1,7 +1,7 @@
 # Reproduce as closely as possible the original bending modes,
 # but fix the M2 and M3 radii.  Should precisely reproduce M1.
 
-NASTRAN_DIR=/Users/josh/src/ZEMAX_FEMAP
+NASTRAN_DIR=${HOME}/src/ZEMAX_FEMAP
 OUT_DIR=corrected
 
 [ ! -d $OUT_DIR ] && mkdir $OUT_DIR

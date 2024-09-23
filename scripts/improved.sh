@@ -1,7 +1,7 @@
 # Improve the bending mode representation.  Don't remove the relative PTT between
 # M1 and M3.  Use annular Zernikes.  Use separate Zernikes for M1 and M3.
 
-NASTRAN_DIR=/Users/josh/src/ZEMAX_FEMAP
+NASTRAN_DIR=${HOME}/src/ZEMAX_FEMAP
 OUT_DIR=improved
 
 [ ! -d $OUT_DIR ] && mkdir $OUT_DIR

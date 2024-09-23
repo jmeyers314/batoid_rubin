@@ -4,8 +4,8 @@
 # So this is similar to the "improved" case, but with indep PTT and minus signs
 # consistent with the project's original SVD.  We haven't reordered modes here.
 
-M1M3_ML_DIR=/Users/josh/src/M1M3_ML
-M2_FEA_DIR=/Users/josh/src/M2_FEA
+M1M3_ML_DIR=${HOME}/src/M1M3_ML
+M2_FEA_DIR=${HOME}/src/M2_FEA
 OUT_DIR=orig
 
 [ ! -d $OUT_DIR ] && mkdir $OUT_DIR

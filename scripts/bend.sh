@@ -2,7 +2,7 @@
 # forces (from Bo) to the unit load cases.  No PTT subtraction anywhere
 # here.
 
-NASTRAN_DIR=/Users/josh/src/ZEMAX_FEMAP
+NASTRAN_DIR=${HOME}/src/ZEMAX_FEMAP
 OUT_DIR=bend
 
 [ ! -d $OUT_DIR ] && mkdir $OUT_DIR
