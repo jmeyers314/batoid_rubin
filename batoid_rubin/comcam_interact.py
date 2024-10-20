@@ -657,8 +657,8 @@ class ComCamAOS:
                 # Determine spacing
                 center = (self._intra_axes["S11"].transAxes + self._intra_fig.transFigure.inverted()).transform([0.5, 0.5])
                 s01 = (self._intra_axes["S01"].transAxes + self._intra_fig.transFigure.inverted()).transform([0.5, 0.5])
-                dx = s01[0] - center[0]  # make this 0.25 degrees
-                factor = 0.25/dx
+                dx = s01[0] - center[0]  # make this 0.3 degrees  (far enough to see vignetting)
+                factor = 0.3/dx
             with focal_out:
                 self._focal_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._focal_axes = self._focal_fig.subplot_mosaic(sensspec)
