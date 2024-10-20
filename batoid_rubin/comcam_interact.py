@@ -249,7 +249,7 @@ class ComCamAOS:
         self._pause_handler = False
         self._control_history = []
 
-    def zero(self, b):
+    def zero(self, b=None):
         self.m2_dz = 0.0
         self.m2_dx = 0.0
         self.m2_dy = 0.0
@@ -282,7 +282,7 @@ class ComCamAOS:
             )
         )
 
-    def randomize(self, b):
+    def randomize(self, b=None):
         # amplitudes for all 50 dof
         offsets = np.zeros(50)
         offsets[self.randomized_dof] = self.offset_rng.normal(scale=self.amp)[self.randomized_dof]
@@ -320,7 +320,7 @@ class ComCamAOS:
             )
         )
 
-    def control_truncated(self, b):
+    def control_truncated(self, b=None):
         dz_fit = self.fit_dz()
         sens = np.array(self.sens)
 
@@ -333,7 +333,7 @@ class ComCamAOS:
         self.apply_dof(-full_dof)
         self._plot_control_history()
 
-    def control_penalty(self, b):
+    def control_penalty(self, b=None):
         # Add rows to sens matrix to penalize large dof
         dz_fit = self.fit_dz()
         ndz = len(dz_fit)
@@ -356,7 +356,7 @@ class ComCamAOS:
         self.apply_dof(-full_dof)
         self._plot_control_history()
 
-    def control_ofc(self, b):
+    def control_ofc(self, b=None):
         from lsst.ts.ofc import OFCData, OFC
         ofc_data = OFCData("comcam")
 
