@@ -443,20 +443,6 @@ class ComCamAOS:
         )
         sky_level = 1.0
 
-        # dz_terms = (
-        #     (1, 4),                          # defocus
-        #     (2, 4), (3, 4),                  # field tilt
-        #     (2, 5), (3, 5), (2, 6), (3, 6),  # linear astigmatism
-        #     (1, 7), (1, 8),                  # constant coma
-        #     # (1, 9), (1, 10),                 # constant trefoil
-        #     # (1, 11),                         # constant spherical
-        #     # (1, 12), (1, 13),                # second astigmatism
-        #     # (1, 14), (1, 15),                # quatrefoil
-        #     # (1, 16), (1, 17),
-        #     # (1, 18), (1, 19),
-        #     # (1, 20), (1, 21),
-        #     # (1, 22)
-        # )
         dz_terms = self.dz_terms
 
         thxs = []
@@ -465,8 +451,10 @@ class ComCamAOS:
         imgs = []
         names = []
         for sensor in self._sensors.values():
+            # Fit all intra/extra focal; skip in-focus
             if sensor.focusz == 0.0:
                 continue
+
             thxs.append(np.deg2rad(sensor.thx))
             thys.append(np.deg2rad(sensor.thy))
             z_refs.append(sensor.z_ref)
@@ -500,9 +488,12 @@ class ComCamAOS:
                 fig, axes = plt.subplots(nrows=4, ncols=9, figsize=(9, 4))
                 for i in range(18):
                     j = 2 * (i//9)
-                    axes[j,i%9].imshow(imgs[i]/np.sum(imgs[i]))
-                    axes[j+1,i%9].imshow(mods[i]/np.sum(mods[i]))
-                    axes[j,i%9].set_title(names[i])
+                    axes[j,i%9].imshow(imgs[i]/np.sum(imgs[i]), origin='upper')
+                    axes[j+1,i%9].imshow(mods[i]/np.sum(mods[i]), origin='upper')
+                    axes[j,i%9].text(
+                        0.02, 0.92, names[i],
+                        transform=axes[j,i%9].transAxes, fontsize=6, color='white'
+                    )
                 for ax in axes.ravel():
                     ax.set_xticks([])
                     ax.set_yticks([])
@@ -511,7 +502,7 @@ class ComCamAOS:
                 axes[1, 0].set_ylabel('Model')
                 axes[2, 0].set_ylabel('Data')
                 axes[3, 0].set_ylabel('Model')
-                fig.tight_layout()
+                fig.tight_layout(pad=0.2)
                 plt.show(fig)
 
             print()
@@ -719,8 +710,11 @@ class ComCamAOS:
             sensor.draw_wf(telescope)
             if sensor.focusz == 0.0:
                 img = galsim.Image(sensor.img.get_array().data)
-                mom = galsim.hsm.FindAdaptiveMom(img)
-                fwhms.append(mom.moments_sigma*2.355*0.2)
+                try:
+                    mom = galsim.hsm.FindAdaptiveMom(img)
+                    fwhms.append(mom.moments_sigma*2.355*0.2)
+                except:
+                    fwhms.append(np.nan)
         self._intra_canvas.draw_idle()
         self._focal_canvas.draw_idle()
         self._extra_canvas.draw_idle()
