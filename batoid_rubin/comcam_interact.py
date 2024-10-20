@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.linalg import lstsq
 from scipy.optimize import least_squares
+import astropy.units as u
+from astropy.units import Quantity
 
 
 class Sensor:
@@ -568,6 +570,64 @@ class ComCamAOS:
         self.m1m3_vals = [x+y for x, y in zip(self.m1m3_vals, dof[10:30])]
         self.m2_vals = [x+y for x, y in zip(self.m2_vals, dof[30:50])]
         self.update()
+
+    def apply_M2(self, dz=None, dx=None, dy=None, rx=None, ry=None, dof=None):
+        if dof is not None:
+            if any(kw is not None for kw in [dz, dx, dy, rx, ry]):
+                raise ValueError("Cannot set kw and dof at same time")
+        else:
+            dof = [0] * 5
+        for i, (kw, unit) in enumerate(zip((dz, dx, dy, rx, ry), [u.micron]*3+[u.arcsec*2])):
+            if kw is not None:
+                if isinstance(kw, Quantity):
+                    kw = kw.to_value(unit)
+                dof[i] = kw
+        dof = np.concatenate([dof, [0]*45])
+        self.apply_dof(dof)
+
+    def apply_camera(self, dz=None, dx=None, dy=None, rx=None, ry=None, dof=None):
+        if dof is not None:
+            if any(kw is not None for kw in [dz, dx, dy, rx, ry]):
+                raise ValueError("Cannot set kw and dof at same time")
+        else:
+            dof = [0] * 5
+        for i, (kw, unit) in enumerate(zip((dz, dx, dy, rx, ry), [u.micron]*3+[u.arcsec*2])):
+            if kw is not None:
+                if isinstance(kw, Quantity):
+                    kw = kw.to_value(unit)
+                dof[i] = kw
+        dof = np.concatenate([[0]*5, dof, [0]*40])
+        self.apply_dof(dof)
+
+    def apply_m1m3(self, dof=None, **kwargs):
+        if dof is not None:
+            if len(kwargs) > 0:
+                raise ValueError("Cannot set kw and dof at same time")
+        else:
+            dof = [0] * 20
+        for k, v in kwargs.items():
+            # Format of k should be bXY
+            idx = int(k[1:])
+            if isinstance(v, Quantity):
+                v = v.to_value(u.micron)
+            dof[idx] = v
+        dof = np.concatenate([[0]*10, dof, [0]*20])
+        self.apply_dof(dof)
+
+    def apply_m2(self, dof=None, **kwargs):
+        if dof is not None:
+            if len(kwargs) > 0:
+                raise ValueError("Cannot set kw and dof at same time")
+        else:
+            dof = [0] * 20
+        for k, v in kwargs.items():
+            # Format of k should be bXY
+            idx = int(k[1:])
+            if isinstance(v, Quantity):
+                v = v.to_value(u.micron)
+            dof[idx] = v
+        dof = np.concatenate([[0]*30, dof])
+        self.apply_dof(dof)
 
     def handle_event(self, change, attr):
         if self._pause_handler:
