@@ -83,9 +83,25 @@ class Sensor:
             telescope, np.deg2rad(self.thx), np.deg2rad(self.thy),
             self.wavelength, reference='mean',
             nx=127
-        ).array
-        wf *= self.wavelength * 1e6 / 2.0  # +/-2 microns range
-        self.wf_img.set_array(wf)
+        )
+        wfarr = wf.array
+        w = ~wfarr.mask
+
+        # Subtract piston/tip/tilt
+        coords = wf.coords
+        x = coords[..., 0]
+        y = coords[..., 1]
+
+        basis = galsim.zernike.zernikeBasis(
+            6, x[w], y[w],
+            R_outer=telescope.pupilSize/2,
+        )
+        coefs, _, _, _ = np.linalg.lstsq(basis.T, wfarr[w], rcond=None)
+        coefs[4:] = 0.0
+        ptt = np.dot(coefs, basis)
+        wfarr[w] = wfarr[w] - ptt
+        wfarr *= self.wavelength * 1e6 / 2.0  # +/-2 microns range
+        self.wf_img.set_array(wfarr)
 
 
 class ComCamAOS:
