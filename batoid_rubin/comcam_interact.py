@@ -15,7 +15,7 @@ from scipy.optimize import least_squares
 
 
 class Sensor:
-    def __init__(self, name, thx, thy, nphot, img, fiducial, focusz=0.0, wavelength=500e-9, wf_img=None):
+    def __init__(self, name, thx, thy, nphot, img, fiducial, focusz=0.0, wavelength=620e-9, wf_img=None):
         self.name = name
         self.thx = thx
         self.thy = thy
@@ -40,7 +40,6 @@ class Sensor:
             reference='chief',
             jmax=66, eps=0.61, focal_length=10.31
         )*self.wavelength  # meters
-
 
     def draw(self, telescope, seeing, rng=None):
         if rng is None:
@@ -129,7 +128,7 @@ class ComCamAOS:
 
         self.fiducial = batoid.Optic.fromYaml("ComCam_r.yaml")
         self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
-        self.wavelength = 500e-9
+        self.wavelength = 620e-9
 
         # Relative magnitude of perturbations in arcsec/micron
         self.amp = [25.0, 1000.0, 1000.0, 25.0, 25.0, 25.0, 4000.0, 4000.0, 25.0, 25.0]
@@ -690,13 +689,13 @@ class ComCamAOS:
         self.dz = batoid.doubleZernike(
             telescope,
             np.deg2rad(0.4),
-            500e-9,
+            self.wavelength,
             kmax=6,
             jmax=37,
             eps=0.61
         )
         self.wfe = np.sqrt(np.sum(np.square(self.dz[:, 4:])))
-        self.wfe *= 500e-9*1e6  # microns
+        self.wfe *= self.wavelength*1e6  # microns
 
         fwhms = []
         for sensor in self._sensors.values():
