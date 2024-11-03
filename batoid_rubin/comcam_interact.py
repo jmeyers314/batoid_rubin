@@ -650,6 +650,8 @@ class ComCamAOS:
             focal_out = ipywidgets.Output()
             extra_out = ipywidgets.Output()
             wf_out = ipywidgets.Output()
+            self.zk_out = ipywidgets.Output()
+            zk_out = self.zk_out
 
             with intra_out:
                 self._intra_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
@@ -668,6 +670,9 @@ class ComCamAOS:
             with wf_out:
                 self._wf_fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
                 self._wf_axes = self._wf_fig.subplot_mosaic(sensspec)
+            with zk_out:
+                zk_out.clear_output()
+                print("Double Zernikes")
 
         self._sensors = {}
         for fig, axes, wf_axes, focusz, prefix, ctx in zip(
@@ -727,13 +732,19 @@ class ComCamAOS:
             self._wf_canvas.header_visible = False
             self._wf_fig.show()
 
-        plot_out = ipywidgets.Tab()
+        plot_out = ipywidgets.Tab(
+            layout=ipywidgets.Layout(
+                width="400px",
+                height="420px"
+            )
+        )
 
-        plot_out.children = [intra_out, focal_out, extra_out, wf_out]
+        plot_out.children = [intra_out, focal_out, extra_out, wf_out, zk_out]
         plot_out.set_title(0, "Intra")
         plot_out.set_title(1, "Focal")
         plot_out.set_title(2, "Extra")
         plot_out.set_title(3, "WF")
+        plot_out.set_title(4, "Zk")
 
         self.text = ""
         self.textout = ipywidgets.Textarea(
@@ -760,9 +771,10 @@ class ComCamAOS:
             kmax=6,
             jmax=37,
             eps=0.61
-        )
-        self.wfe = np.sqrt(np.sum(np.square(self.dz[:, 4:])))
-        self.wfe *= self.wavelength*1e6  # microns
+        ) * self.wavelength * 1e6 # microns
+        self.dz[0] = 0.0
+        self.dz[:, :4] = 0.0
+        self.wfe = np.sqrt(np.sum(np.square(self.dz)))
 
         fwhms = []
         for sensor in self._sensors.values():
@@ -800,6 +812,20 @@ class ComCamAOS:
             self.m2_controls[i].value = val
         self._pause_handler = False
 
+        with self.zk_out:
+            self.zk_out.clear_output()
+            print("Double Zernikes")
+            print("  k   j    dz[µm]   tot[µm]")
+            print("===========================")
+            asort = np.argsort(np.abs(self.dz).ravel())[::-1]
+            ks, js = np.unravel_index(asort[:15], self.dz.shape)
+            cumsum = 0.0
+            for k, j in zip(ks, js):
+                val = self.dz[k, j]
+                cumsum += val**2
+                print("{:3d} {:3d}  {:8.4f}  {:8.4f}".format(k, j, val, np.sqrt(cumsum)))
+            print()
+            print("RSS [µm]: {:8.4f}".format(np.sqrt(np.sum(np.square(self.dz)))))
 
 
     def display(self):
