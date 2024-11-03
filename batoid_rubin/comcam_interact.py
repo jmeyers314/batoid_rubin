@@ -690,7 +690,7 @@ class ComCamAOS:
                     x, y = mytrans.transform([0.5, 0.5])
                     if focusz == 0.0:
                         nphot = 1000
-                        nx = 21
+                        nx = 41
                         wf_img = wf_ax.imshow(np.zeros((127, 127)), vmin=-1, vmax=1, cmap='bwr')
                         wf_ax.set_xticks([])
                         wf_ax.set_yticks([])
