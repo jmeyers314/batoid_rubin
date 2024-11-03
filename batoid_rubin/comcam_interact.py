@@ -116,7 +116,7 @@ class ComCamAOS:
         randomized_dof=list(range(10)),
         controlled_dof=list(range(10)),
         controlled_truncated_dof=[0,1,2,6,7,8,9],
-        dz_terms = ((1, 4), (2, 4), (3, 4), (2, 5), (3, 5), (2, 6), (3, 6), (1, 7), (1, 8)),
+        dz_terms = ((1, 4), (2, 4), (3, 4), (2, 5), (3, 5), (2, 6), (3, 6), (1, 7), (1, 8))
     ):
         batoid._batoid.set_nthreads(nthread)
 
