@@ -86,3 +86,65 @@ def attach_attr(**kwargs):
             setattr(f, k, v)
         return f
     return inner
+
+def read_h5_map(fileset, dataset = '/dataset'):
+    '''
+    The method takes a list of h5 files, get the images, and average them to get a combined image array.
+    
+    Parameters:
+    fileset: 
+        a list of h5 files
+    dataset:
+        the dataset name in the h5 files
+    
+    Returns:
+    data: 
+        the averaged image array
+    centerRow, centerCol, pixelSize
+    '''
+    i = 0
+    if len(fileset) == 0:
+        print('Error: empty fileset')
+        sys.exit()
+    for filename in fileset:
+        h5file = os.path.join(filename)
+        f = h5py.File(h5file,'r')
+        data0 = f[dataset]
+        if 'date' in data0.attrs.keys():
+            if len(data0.attrs['date']) == 1:
+                timeStamp = data0.attrs['date'][0].decode('ascii')
+            else:
+                timeStamp = data0.attrs['date'].decode('ascii')
+        else:
+            timeStamp = 'date not in h5 file.'
+        if i==0:
+            centerRow = data0.attrs['centerRow']
+            centerCol = data0.attrs['centerCol']
+            pixelSize = data0.attrs['pixelSize']
+            data = data0[:]
+        else:
+            data += data0[:]
+        f.close()
+        filenameShort = filename
+
+        print('%s: %s '%(filenameShort, timeStamp))
+        i+=1
+    data /= i
+    data = np.rot90(data, 1) # so that we can use imshow(data, origin='lower')
+    return data, centerRow, centerCol, pixelSize
+
+def load_and_clip_m2_surface(file_path):
+    data = scipy.io.loadmat(file_path)
+
+    s = data['s']
+    m2_data = s['z'][0][0] * 1e-3  # Convert from mm to um
+
+    valid_mask = np.isfinite(m2_data)
+    valid_rows = np.any(valid_mask, axis=1)
+    valid_cols = np.any(valid_mask, axis=0)
+
+    row_min, row_max = np.where(valid_rows)[0][[0, -1]]
+    col_min, col_max = np.where(valid_cols)[0][[0, -1]]
+    m2_clipped = m2_data[row_min:row_max+1, col_min:col_max+1]
+
+    return m2_clipped
