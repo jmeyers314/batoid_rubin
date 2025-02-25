@@ -145,7 +145,7 @@ class ComCamAOS:
         self.dz_terms = dz_terms
 
         self.fiducial = batoid.Optic.fromYaml("ComCam_r.yaml")
-        self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
+        self.builder = batoid_rubin.LSSTBuilder(self.fiducial, add_figure_errors=True)
         self.wavelength = 620e-9
 
         # Relative magnitude of perturbations in arcsec/micron

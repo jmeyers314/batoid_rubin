@@ -711,16 +711,17 @@ class LSSTBuilder:
         )
 
         self.m1_error, self.m3_error, self.m2_error = None, None, None
-        if add_figure_errors:
+        self.add_figure_errors = add_figure_errors
+        if self.add_figure_errors:
             x_m1 = np.linspace(-4.18, 4.18, 986)
             y_m1 = np.linspace(-4.18, 4.18, 986)
-            m1s, _, _, _ = read_h5_map('data/m1_figure_error.h5')
+            m1s, _, _, _ = read_h5_map(['data/m1_figure_error.h5'])
             m1s = np.nan_to_num(m1s, nan=0.0)
             self.m1_error = batoid.Bicubic(x_m1, y_m1, m1s*1e-6)
-             
+
             x_m3 = np.linspace(-2.508, 2.508, 1006)
             y_m3 = np.linspace(-2.508, 2.508, 1006)
-            m3s, _, _, _ = read_h5_map('data/m3_figure_error.h5')
+            m3s, _, _, _ = read_h5_map(['data/m3_figure_error.h5'])
             m3s = np.nan_to_num(m3s, nan=0.0)
             self.m3_error = batoid.Bicubic(x_m3, y_m3, m3s*1e-6)
 

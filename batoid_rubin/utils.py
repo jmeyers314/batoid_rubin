@@ -1,3 +1,6 @@
+import os
+import h5py
+
 from pathlib import Path
 from functools import lru_cache
 
@@ -90,15 +93,15 @@ def attach_attr(**kwargs):
 def read_h5_map(fileset, dataset = '/dataset'):
     '''
     The method takes a list of h5 files, get the images, and average them to get a combined image array.
-    
+
     Parameters:
-    fileset: 
+    fileset:
         a list of h5 files
     dataset:
         the dataset name in the h5 files
-    
+
     Returns:
-    data: 
+    data:
         the averaged image array
     centerRow, centerCol, pixelSize
     '''
@@ -107,7 +110,7 @@ def read_h5_map(fileset, dataset = '/dataset'):
         print('Error: empty fileset')
         sys.exit()
     for filename in fileset:
-        h5file = os.path.join(filename)
+        h5file = os.path.join("/Users/jmeyers3/src/batoid_rubin/batoid_rubin/"+filename)
         f = h5py.File(h5file,'r')
         data0 = f[dataset]
         if 'date' in data0.attrs.keys():
@@ -134,7 +137,8 @@ def read_h5_map(fileset, dataset = '/dataset'):
     return data, centerRow, centerCol, pixelSize
 
 def load_and_clip_m2_surface(file_path):
-    data = scipy.io.loadmat(file_path)
+    import scipy.io
+    data = scipy.io.loadmat("/Users/jmeyers3/src/batoid_rubin/batoid_rubin/"+file_path)
 
     s = data['s']
     m2_data = s['z'][0][0] * 1e-3  # Convert from mm to um
