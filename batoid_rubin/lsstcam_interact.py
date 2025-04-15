@@ -1,0 +1,334 @@
+import batoid
+import galsim
+import matplotlib.pyplot as plt
+import numpy as np
+from ipywidgets import FloatText, HBox, Layout, Output, Tab, VBox
+
+import batoid_rubin
+
+
+class Sensor:
+    def __init__(
+        self,
+        name,
+        thx,
+        thy,
+        nphot,
+        focusz,
+        wavelength,
+        img,
+    ):
+        self.name = name
+        self.thx = thx
+        self.thy = thy
+        self.nphot = nphot
+        self.focusz = focusz
+        self.wavelength = wavelength
+        self.img = img
+        self.bins = self.img.get_array().shape[0]
+        bo2 = self.bins // 2
+        self.range = bo2 * 10e-6 * np.array([[-1, 1], [-1, 1]])
+        self.wf_img = None
+
+    def draw(self, telescope, seeing, rng=None):
+        if rng is None:
+            rng = np.random.default_rng()
+        elif isinstance(rng, int):
+            rng = np.random.default_rng(rng)
+
+        telescope = telescope.withGloballyShiftedOptic("Detector", [0, 0, self.focusz])
+
+        rv = batoid.RayVector.asPolar(
+            optic=telescope,
+            wavelength=self.wavelength,
+            nrandom=self.nphot,
+            rng=rng,
+            theta_x=np.deg2rad(self.thx),
+            theta_y=np.deg2rad(self.thy),
+        )
+        telescope.trace(rv)
+
+        rv.x[:] -= np.mean(rv.x[~rv.vignetted])
+        rv.y[:] -= np.mean(rv.y[~rv.vignetted])
+
+        # Convolve in a Gaussian
+        scale = 10e-6 * seeing / 2.35 / 0.2
+        rv.x[:] += rng.normal(scale=scale, size=len(rv))
+        rv.y[:] += rng.normal(scale=scale, size=len(rv))
+
+        # Bin rays
+        psf, _, _ = np.histogram2d(
+            rv.y[~rv.vignetted], rv.x[~rv.vignetted], bins=self.bins, range=self.range
+        )
+        psf = psf[:, ::-1]
+        self.img.set_array(psf / np.max(psf))
+
+    def add_wf_img(self, wf_img):
+        self.wf_img = wf_img
+
+    def draw_wf(self, telescope):
+        if self.wf_img is None:
+            return
+        telescope = telescope.withGloballyShiftedOptic("Detector", [0, 0, self.focusz])
+        wf = batoid.wavefront(
+            telescope,
+            np.deg2rad(self.thx),
+            np.deg2rad(self.thy),
+            self.wavelength,
+            reference="mean",
+            nx=127,
+        )
+        wfarr = wf.array
+        w = ~wfarr.mask
+
+        # Subtract piston/tip/tilt
+        coords = wf.coords
+        x = coords[..., 0]
+        y = coords[..., 1]
+
+        basis = galsim.zernike.zernikeBasis(
+            6,
+            x[w],
+            y[w],
+            R_outer=telescope.pupilSize / 2,
+        )
+        coefs, _, _, _ = np.linalg.lstsq(basis.T, wfarr[w], rcond=None)
+        coefs[4:] = 0.0
+        ptt = np.dot(coefs, basis)
+        wfarr[w] = wfarr[w] - ptt
+        wfarr *= self.wavelength * 1e6 / 2.0  # +/-2 microns range
+        self.wf_img.set_array(wfarr)
+
+
+class LSSTCamInteract:
+    def __init__(self, rng=None):
+        if rng is None:
+            rng = np.random.default_rng()
+        elif isinstance(rng, int):
+            rng = np.random.default_rng(rng)
+        self.rng = rng
+
+        self.fiducial = batoid.Optic.fromYaml("LSST_r_align_holes.yaml")
+        self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
+        self.wavelength = 625e-9
+
+        # widget variables
+        self.m2_dz = 0.0
+        self.m2_dx = 0.0
+        self.m2_dy = 0.0
+        self.m2_Rx = 0.0
+        self.m2_Ry = 0.0
+
+        self.cam_dz = 0.0
+        self.cam_dx = 0.0
+        self.cam_dy = 0.0
+        self.cam_Rx = 0.0
+        self.cam_Ry = 0.0
+
+        # Controls
+        kwargs = {
+            "layout": {"width": "180px"},
+            "style": {"description_width": "initial"},
+            "format": ".3f",
+        }
+        self.m2_dz_control = FloatText(
+            value=self.m2_dz, description="M2 dz (µm)", step=10, **kwargs
+        )
+        self.m2_dx_control = FloatText(
+            value=self.m2_dz, description="M2 dx (µm)", step=500, **kwargs
+        )
+        self.m2_dy_control = FloatText(
+            value=self.m2_dy, description="M2 dy (µm)", step=500, **kwargs
+        )
+        self.m2_Rx_control = FloatText(
+            value=self.m2_Rx, description="M2 Rx (arcsec)", step=10, **kwargs
+        )
+        self.m2_Ry_control = FloatText(
+            value=self.m2_Ry, description="M2 Ry (arcsec)", step=10, **kwargs
+        )
+        self.cam_dz_control = FloatText(
+            value=self.cam_dz, description="Cam dz (µm)", step=10, **kwargs
+        )
+        self.cam_dx_control = FloatText(
+            value=self.cam_dz, description="Cam dx (µm)", step=2000, **kwargs
+        )
+        self.cam_dy_control = FloatText(
+            value=self.cam_dy, description="Cam dy (µm)", step=2000, **kwargs
+        )
+        self.cam_Rx_control = FloatText(
+            value=self.cam_Rx, description="Cam Rx (arcsec)", step=10, **kwargs
+        )
+        self.cam_Ry_control = FloatText(
+            value=self.cam_Ry, description="Cam Ry (arcsec)", step=10, **kwargs
+        )
+        self.hex_controls = VBox(
+            [
+                self.m2_dz_control,
+                self.m2_dx_control,
+                self.m2_dy_control,
+                self.m2_Rx_control,
+                self.m2_Ry_control,
+                self.cam_dz_control,
+                self.cam_dx_control,
+                self.cam_dy_control,
+                self.cam_Rx_control,
+                self.cam_Ry_control,
+            ]
+        )
+
+        self.component_controls = Tab(layout=Layout(min_width="240pt", height="290pt"))
+        self.component_controls.children = [self.hex_controls]
+        self.component_controls.set_title(0, "Hex")
+
+        self.m2_dz_control.observe(
+            lambda change: self.handle_event(change, "m2_dz"), "value"
+        )
+        self.m2_dx_control.observe(
+            lambda change: self.handle_event(change, "m2_dx"), "value"
+        )
+        self.m2_dy_control.observe(
+            lambda change: self.handle_event(change, "m2_dy"), "value"
+        )
+        self.m2_Rx_control.observe(
+            lambda change: self.handle_event(change, "m2_Rx"), "value"
+        )
+        self.m2_Ry_control.observe(
+            lambda change: self.handle_event(change, "m2_Ry"), "value"
+        )
+        self.cam_dz_control.observe(
+            lambda change: self.handle_event(change, "cam_dz"), "value"
+        )
+        self.cam_dx_control.observe(
+            lambda change: self.handle_event(change, "cam_dx"), "value"
+        )
+        self.cam_dy_control.observe(
+            lambda change: self.handle_event(change, "cam_dy"), "value"
+        )
+        self.cam_Rx_control.observe(
+            lambda change: self.handle_event(change, "cam_Rx"), "value"
+        )
+        self.cam_Ry_control.observe(
+            lambda change: self.handle_event(change, "cam_Ry"), "value"
+        )
+
+        self.view = self._view()
+
+    def handle_event(self, change, attr):
+        if isinstance(attr, tuple):
+            current = getattr(self, attr[0])
+            current[attr[1]] = change["new"]
+            setattr(self, attr[0], current)
+        else:
+            setattr(self, attr, change["new"])
+        self.update()
+
+    def _view(self):
+        cornerspec = [["R00", "R40"], ["R04", "R44"]]
+        scispec = [
+            [".", "R10", "R20", "R30", "."],
+            ["R01", "R11", "R21", "R31", "R41"],
+            ["R02", "R12", "R22", "R32", "R42"],
+            ["R03", "R13", "R23", "R33", "R43"],
+            [".", "R14", "R24", "R34", "."],
+        ]
+
+        self._fig_output = {}
+        self._fig = {}
+        self._axes = {}
+        self._sensors = {}
+        with plt.ioff():
+            for name, spec, focusz in [
+                ("intra", cornerspec, -1.5e-3),
+                ("extra", cornerspec, 1.5e-3),
+                ("focal", scispec, 0.0),
+            ]:
+                out = Output()
+                self._fig_output[name] = out
+
+                with out:
+                    fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
+                    self._fig[name] = fig
+                    fig.suptitle(name, fontsize=8)
+                    fig.canvas.header_visible = False
+                    axes = fig.subplot_mosaic(spec)
+                    self._axes[name] = axes
+
+                    for k, ax in axes.items():
+                        row = int(k[2])
+                        col = int(k[1])
+                        # Raft = 6000 pixels * 0.2 arcsec = 0.333 degrees
+                        thx = (col - 2) * 0.333
+                        thy = (row - 2) * 0.333
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+                        ax.set_aspect("equal")
+                        if name in ["intra", "extra"]:
+                            img = ax.imshow(
+                                np.zeros((181, 181)), vmin=0, vmax=1, origin="lower"
+                            )
+                        else:
+                            img = ax.imshow(
+                                np.zeros((41, 41)), vmin=0, vmax=1, origin="lower"
+                            )
+                        ax.text(
+                            0.02,
+                            0.02,
+                            k,
+                            fontsize=6,
+                            color="white",
+                            transform=ax.transAxes,
+                        )
+                        self._sensors[name + k] = Sensor(
+                            name + k,
+                            thx=thx,
+                            thy=thy,
+                            nphot=10_000 if name == "focal" else 100_000,
+                            focusz=focusz,
+                            wavelength=self.wavelength,
+                            img=img,
+                        )
+                    fig.show()
+
+            # wf is special
+            out = Output()
+            self._fig_output["wf"] = out
+            with out:
+                fig = plt.figure(constrained_layout=True, figsize=(3.5, 3.5))
+                self._fig["wf"] = fig
+                fig.suptitle("Wavefront", fontsize=8)
+                fig.canvas.header_visible = False
+                axes = fig.subplot_mosaic(scispec)
+                self._axes["wf"] = axes
+                for k, ax in axes.items():
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.set_aspect("equal")
+                    wf_img = ax.imshow(
+                        np.zeros((127, 127)),
+                        vmin=-1,
+                        vmax=1,
+                        origin="lower",
+                        cmap="bwr",
+                    )
+                    self._sensors["focal" + k].add_wf_img(wf_img)
+                    ax.plot([0, 1], [0, 1], "k-", lw=0.5)
+                fig.show()
+
+        out = HBox([self._fig_output[n] for n in ["intra", "extra", "focal", "wf"]])
+        return out
+
+    def update(self):
+        dof = [self.m2_dz, self.m2_dx, self.m2_dy, self.m2_Rx, self.m2_Ry]
+        dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
+        dof += [0] * 40
+
+        builder = self.builder.with_aos_dof(dof)
+        telescope = builder.build()
+        for sensor in self._sensors.values():
+            sensor.draw(telescope, seeing=0.5, rng=1)
+            sensor.draw_wf(telescope)
+
+    def display(self):
+        self.app = VBox([self.view, self.component_controls])
+        self.update()
+        return self.app
