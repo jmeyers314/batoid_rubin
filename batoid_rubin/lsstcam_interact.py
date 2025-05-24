@@ -97,7 +97,7 @@ class Sensor:
         ptt = np.dot(coefs, basis)
         wfarr[w] = wfarr[w] - ptt
         wfarr *= self.wavelength * 1e6 / 2.0  # +/-2 microns range
-        self.wf_img.set_array(wfarr)
+        self.wf_img.set_array(wfarr[:, ::-1])
 
 
 class LSSTCamInteract:
@@ -108,109 +108,68 @@ class LSSTCamInteract:
             rng = np.random.default_rng(rng)
         self.rng = rng
 
-        self.fiducial = batoid.Optic.fromYaml("LSST_r_align_holes.yaml")
+        # self.fiducial = batoid.Optic.fromYaml("LSST_r_align_holes.yaml")
+        self.fiducial = batoid.Optic.fromYaml("LSST_r_baffles.yaml")
         self.builder = batoid_rubin.LSSTBuilder(self.fiducial)
         self.wavelength = 625e-9
 
         # widget variables
-        self.m2_dz = 0.0
-        self.m2_dx = 0.0
-        self.m2_dy = 0.0
-        self.m2_Rx = 0.0
-        self.m2_Ry = 0.0
-
-        self.cam_dz = 0.0
-        self.cam_dx = 0.0
-        self.cam_dy = 0.0
-        self.cam_Rx = 0.0
-        self.cam_Ry = 0.0
-
-        # Controls
         kwargs = {
-            "layout": {"width": "180px"},
+            "layout": {"width": "150px"},
             "style": {"description_width": "initial"},
             "format": ".3f",
         }
-        self.m2_dz_control = FloatText(
-            value=self.m2_dz, description="M2 dz (µm)", step=10, **kwargs
-        )
-        self.m2_dx_control = FloatText(
-            value=self.m2_dz, description="M2 dx (µm)", step=500, **kwargs
-        )
-        self.m2_dy_control = FloatText(
-            value=self.m2_dy, description="M2 dy (µm)", step=500, **kwargs
-        )
-        self.m2_Rx_control = FloatText(
-            value=self.m2_Rx, description="M2 Rx (arcsec)", step=10, **kwargs
-        )
-        self.m2_Ry_control = FloatText(
-            value=self.m2_Ry, description="M2 Ry (arcsec)", step=10, **kwargs
-        )
-        self.cam_dz_control = FloatText(
-            value=self.cam_dz, description="Cam dz (µm)", step=10, **kwargs
-        )
-        self.cam_dx_control = FloatText(
-            value=self.cam_dz, description="Cam dx (µm)", step=2000, **kwargs
-        )
-        self.cam_dy_control = FloatText(
-            value=self.cam_dy, description="Cam dy (µm)", step=2000, **kwargs
-        )
-        self.cam_Rx_control = FloatText(
-            value=self.cam_Rx, description="Cam Rx (arcsec)", step=10, **kwargs
-        )
-        self.cam_Ry_control = FloatText(
-            value=self.cam_Ry, description="Cam Ry (arcsec)", step=10, **kwargs
-        )
-        self.hex_controls = VBox(
-            [
-                self.m2_dz_control,
-                self.m2_dx_control,
-                self.m2_dy_control,
-                self.m2_Rx_control,
-                self.m2_Ry_control,
-                self.cam_dz_control,
-                self.cam_dx_control,
-                self.cam_dy_control,
-                self.cam_Rx_control,
-                self.cam_Ry_control,
-            ]
-        )
+        controls = []
+        hc = []
+        for name, step, unit in [
+            ("m2_dz", 10, "µm"),
+            ("m2_dx", 500, "µm"),
+            ("m2_dy", 500, "µm"),
+            ("m2_Rx", 10, "arcsec"),
+            ("m2_Ry", 10, "arcsec"),
+            ("cam_dz", 10, "µm"),
+            ("cam_dx", 2000, "µm"),
+            ("cam_dy", 2000, "µm"),
+            ("cam_Rx", 10, "arcsec"),
+            ("cam_Ry", 10, "arcsec"),
+        ]:
+            setattr(self, name, 0.0)
+            control = FloatText(
+                value=0.0,
+                description=name.replace("m2", "M2").replace("cam", "Cam")+f"({unit})",
+                step=step,
+                **kwargs
+            )
+            setattr(self, name+"_control", control)
+            # Need a default argument for name so lambda captures current value
+            control.observe(lambda change, name=name: self.handle_event(change, name), "value")
+            hc.append(control)
+        controls.append(hc)
 
-        self.component_controls = Tab(layout=Layout(min_width="240pt", height="290pt"))
-        self.component_controls.children = [self.hex_controls]
-        self.component_controls.set_title(0, "Hex")
+        for mirror in ["m1m3", "m2"]:
+            setattr(self, mirror+"_vals", [0.0]*20)
+            for slc in [(0, 10), (10, 20)]:
+                mc = []
+                for i in range(*slc):
+                    name = mirror+f"_B{i+1}"
+                    description = f"{name} (µm)"
+                    description = description.replace("m1m3", "M1M3")
+                    description = description.replace("m2", "M2")
+                    description = description.replace("_", " ")
+                    control = FloatText(
+                        value=0.0,
+                        description=description,
+                        step=0.01,
+                        **kwargs
+                    )
+                    setattr(self, name+"_control", control)
+                    control.observe(lambda change, i=i, mirror=mirror: self.handle_event(change, (mirror+"_vals", i)), "value")
+                    mc.append(control)
+                controls.append(mc)
 
-        self.m2_dz_control.observe(
-            lambda change: self.handle_event(change, "m2_dz"), "value"
+        self.controls = HBox(
+            [VBox(control) for control in controls]
         )
-        self.m2_dx_control.observe(
-            lambda change: self.handle_event(change, "m2_dx"), "value"
-        )
-        self.m2_dy_control.observe(
-            lambda change: self.handle_event(change, "m2_dy"), "value"
-        )
-        self.m2_Rx_control.observe(
-            lambda change: self.handle_event(change, "m2_Rx"), "value"
-        )
-        self.m2_Ry_control.observe(
-            lambda change: self.handle_event(change, "m2_Ry"), "value"
-        )
-        self.cam_dz_control.observe(
-            lambda change: self.handle_event(change, "cam_dz"), "value"
-        )
-        self.cam_dx_control.observe(
-            lambda change: self.handle_event(change, "cam_dx"), "value"
-        )
-        self.cam_dy_control.observe(
-            lambda change: self.handle_event(change, "cam_dy"), "value"
-        )
-        self.cam_Rx_control.observe(
-            lambda change: self.handle_event(change, "cam_Rx"), "value"
-        )
-        self.cam_Ry_control.observe(
-            lambda change: self.handle_event(change, "cam_Ry"), "value"
-        )
-
         self.view = self._view()
 
     def handle_event(self, change, attr):
@@ -256,9 +215,13 @@ class LSSTCamInteract:
                     for k, ax in axes.items():
                         row = int(k[2])
                         col = int(k[1])
-                        # Raft = 6000 pixels * 0.2 arcsec = 0.333 degrees
-                        thx = (col - 2) * 0.333
-                        thy = (row - 2) * 0.333
+                        # Raft = 12000 pixels * 0.2 arcsec = 0.666 degrees
+                        thx = -(col - 2) * 0.666
+                        thy = -(row - 2) * 0.666
+                        # Unless were on a WF sensor, then we're a little closer in
+                        if abs(row-2) == abs(col-2) == 2:
+                            thx *= 5/6
+                            thy *= 5/6
                         ax.set_xticks([])
                         ax.set_yticks([])
                         ax.set_aspect("equal")
@@ -320,15 +283,22 @@ class LSSTCamInteract:
     def update(self):
         dof = [self.m2_dz, self.m2_dx, self.m2_dy, self.m2_Rx, self.m2_Ry]
         dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
-        dof += [0] * 40
+        dof += self.m1m3_vals
+        dof += self.m2_vals
 
         builder = self.builder.with_aos_dof(dof)
         telescope = builder.build()
         for sensor in self._sensors.values():
-            sensor.draw(telescope, seeing=0.5, rng=1)
+            sensor.draw(telescope, seeing=0.1, rng=1)
             sensor.draw_wf(telescope)
 
+    def set_m2_dz(self, m2_dz):
+        self.m2_dz = m2_dz
+        # Need to set the value of the control to match
+        self.m2_dz_control.value = m2_dz
+        self.update()
+
     def display(self):
-        self.app = VBox([self.view, self.component_controls])
+        self.app = VBox([self.view, self.controls])
         self.update()
         return self.app
