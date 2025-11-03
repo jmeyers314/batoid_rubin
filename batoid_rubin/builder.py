@@ -10,7 +10,7 @@ import galsim
 import numpy as np
 import yaml
 
-from .utils import _node_to_grid, _fits_cache, attach_attr
+from .utils import _node_to_grid, _fits_cache, attach_attr, read_h5_map, load_and_clip_m2_surface
 
 
 BendingMode = namedtuple(
@@ -614,6 +614,7 @@ class LSSTBuilder:
         bend_dir="bend",
         use_m1m3_modes=None,
         use_m2_modes=None,
+        add_figure_errors=False,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -643,6 +644,8 @@ class LSSTBuilder:
             and the 13th and 14th AOS degrees of freedom will be the 4th and 2nd
             M2 bending modes.  If None, then use the modes in the order
             specified in the bending mode directory.
+        add_figure_errors : bool, optional
+            Include figure errors in the model.  Default is False.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -706,6 +709,27 @@ class LSSTBuilder:
             self.m1m3_dof_indices.stop,
             self.m1m3_dof_indices.stop+len(self.use_m2_modes),
         )
+
+        self.m1_error, self.m3_error, self.m2_error = None, None, None
+        self.add_figure_errors = add_figure_errors
+        if self.add_figure_errors:
+            x_m1 = np.linspace(-4.18, 4.18, 986)
+            y_m1 = np.linspace(-4.18, 4.18, 986)
+            m1s, _, _, _ = read_h5_map(['data/m1_figure_error.h5'])
+            m1s = np.nan_to_num(m1s, nan=0.0)
+            self.m1_error = batoid.Bicubic(x_m1, y_m1, m1s*1e-6)
+
+            x_m3 = np.linspace(-2.508, 2.508, 1006)
+            y_m3 = np.linspace(-2.508, 2.508, 1006)
+            m3s, _, _, _ = read_h5_map(['data/m3_figure_error.h5'])
+            m3s = np.nan_to_num(m3s, nan=0.0)
+            self.m3_error = batoid.Bicubic(x_m3, y_m3, m3s*1e-6)
+
+            x_m2 = np.linspace(-1.71, 1.71, 685)
+            y_m2 = np.linspace(-1.71, 1.71, 685)
+            m2s = load_and_clip_m2_surface('data/m2_figure_error.mat')
+            m2s = np.nan_to_num(m2s, nan=0.0)
+            self.m2_error = batoid.Bicubic(x_m2, y_m2, m2s*1e-6)
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -1193,12 +1217,23 @@ class LSSTBuilder:
 
     def build(self):
         optic = self.fiducial
+        optic = self._apply_figure_errors(optic)
         optic = self._apply_phase(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_M1M3_surface_perturbations(optic)
         optic = self._apply_M2_surface_perturbations(optic)
         optic = self._apply_camera_surface_perturbations(optic)
         return optic
+
+    def _apply_figure_errors(self, optic):
+        if not self.add_figure_errors:
+            return optic
+
+        optic = optic.withPerturbedSurface('M1', self.m1_error)
+        optic = optic.withPerturbedSurface('M3', self.m3_error)
+        optic = optic.withPerturbedSurface('M2', self.m2_error)
+        return optic
+
 
     def _apply_phase(self, optic):
         if self.extra_zk is None:
