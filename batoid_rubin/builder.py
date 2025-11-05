@@ -5,12 +5,13 @@ from functools import lru_cache
 from numbers import Real
 
 import astropy.io.fits as fits
+from astropy.table import Table
 import batoid
 import galsim
 import numpy as np
 import yaml
 
-from .utils import _node_to_grid, _fits_cache, attach_attr
+from .utils import _node_to_grid, _fits_cache, attach_attr, resolve_data_dir, load_and_clip_m2_surface, read_h5_map
 
 
 BendingMode = namedtuple(
@@ -342,6 +343,35 @@ def transform_zernike(zernike, R_outer, R_inner):
     ret.R_inner = R_inner
     return ret
 
+@lru_cache(maxsize=4)
+def load_mirror_figure(mirror_figure_dir):
+    x_m1 = np.linspace(-4.18, 4.18, 986)
+    y_m1 = np.linspace(-4.18, 4.18, 986)
+    m1s = read_h5_map(Path(mirror_figure_dir), 'm1_figure_error.h5')
+    m1s = np.nan_to_num(m1s, nan=0.0)
+    m1_error = batoid.Bicubic(x_m1, y_m1, m1s)
+
+    x_m3 = np.linspace(-2.508, 2.508, 1006)
+    y_m3 = np.linspace(-2.508, 2.508, 1006)
+    m3s = read_h5_map(Path(mirror_figure_dir), 'm3_figure_error.h5')
+    m3s = np.nan_to_num(m3s, nan=0.0)
+    m3_error = batoid.Bicubic(x_m3, y_m3, m3s)
+
+    x_m2 = np.linspace(-1.71, 1.71, 685)
+    y_m2 = np.linspace(-1.71, 1.71, 685)
+    m2s = load_and_clip_m2_surface(Path(mirror_figure_dir), 'm2_figure_error.mat')
+    m2s = np.nan_to_num(m2s, nan=0.0)
+    m2_error = batoid.Bicubic(x_m2, y_m2, m2s)
+
+    return m1_error, m2_error, m3_error
+
+def _load_height_map(height_map_dir):
+    height_table = Table.read(Path(height_map_dir) / 'LsstCam_focal_plane_heights_interpolated.fits')
+    x = np.unique(height_table["x"].to("m").value)
+    y = np.unique(height_table["y"].to("m").value)
+    z = height_table["z"].to("m").value.reshape(x.size, y.size)
+
+    return batoid.Bicubic(x, y, z)
 
 def _load_mirror_bend(bend_dir, inds, config):
     """Load bending modes for a single mirror.
@@ -610,10 +640,13 @@ class LSSTBuilder:
     def __init__(
         self,
         fiducial,
-        fea_dir="fea_legacy",
-        bend_dir="bend",
+        fea_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/fea_legacy",
+        bend_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/bend_legacy",
+        height_map_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/height_map",
+        mirror_figure_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/mirror_figure",
         use_m1m3_modes=None,
         use_m2_modes=None,
+        add_figure_errors=True,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -643,6 +676,8 @@ class LSSTBuilder:
             and the 13th and 14th AOS degrees of freedom will be the 4th and 2nd
             M2 bending modes.  If None, then use the modes in the order
             specified in the bending mode directory.
+        add_figure_errors : bool, optional
+            Include figure errors in the model.  Default is False.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -652,43 +687,18 @@ class LSSTBuilder:
         self.fiducial = fiducial
         fea_dir = Path(fea_dir)
         bend_dir = Path(bend_dir)
+        height_map_dir = Path(height_map_dir)
+        mirror_figure_dir = Path(mirror_figure_dir)
 
-        if not fea_dir.is_dir():
-            # See if we can find the data in the batoid_rubin data directory.
-            from . import datadir
-            fea_dir = datadir / fea_dir
-            if not fea_dir.is_dir():
-                # See if we can download the data from Zenodo.
-                from .data.download_rubin_data import (
-                    download_rubin_data, zenodo_dois
-                )
-                if fea_dir.name in zenodo_dois:
-                    args = namedtuple("Args", ["dataset", "outdir"])
-                    args.dataset = fea_dir.parts[-1]
-                    args.outdir = None
-                    download_rubin_data(args)
-                else:
-                    raise ValueError("Cannot infer fea_dir.")
-
-        if not bend_dir.is_dir():
-            # See if we can find the data in the batoid_rubin data directory.
-            from . import datadir
-            bend_dir = datadir / bend_dir
-            if not bend_dir.is_dir():
-                # See if we can download the data from Zenodo.
-                from .data.download_rubin_data import (
-                    download_rubin_data, zenodo_dois
-                )
-                if bend_dir.name in zenodo_dois:
-                    args = namedtuple("Args", ["dataset", "outdir"])
-                    args.dataset = bend_dir.parts[-1]
-                    args.outdir = None
-                    download_rubin_data(args)
-                else:
-                    raise ValueError("Cannot infer bend_dir.")
+        fea_dir = resolve_data_dir(fea_dir)
+        bend_dir = resolve_data_dir(bend_dir)
+        height_map_dir = resolve_data_dir(height_map_dir)
+        mirror_figure_dir = resolve_data_dir(mirror_figure_dir)
 
         self.fea_dir = fea_dir
         self.bend_dir = bend_dir
+        self.height_map_dir = height_map_dir
+        self.mirror_figure_dir = mirror_figure_dir
 
         if use_m1m3_modes is None:
             with open(bend_dir / "bend.yaml") as f:
@@ -715,6 +725,8 @@ class LSSTBuilder:
             self.cam_name = 'RubinComCam.ComCam'
         else:
             raise ValueError("Unsupported optic")
+
+        self.add_figure_errors = add_figure_errors
 
         # "Input" variables.
         self.m1m3_zenith = None
@@ -1194,6 +1206,8 @@ class LSSTBuilder:
     def build(self):
         optic = self.fiducial
         optic = self._apply_phase(optic)
+        optic = self._apply_height_map(optic)
+        optic = self._apply_figure_errors(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_M1M3_surface_perturbations(optic)
         optic = self._apply_M2_surface_perturbations(optic)
@@ -1217,6 +1231,23 @@ class LSSTBuilder:
                 obscuration=optic['M1'].obscuration,
             )
         )
+        return optic
+    
+    def _apply_height_map(self, optic):
+        height_map = _load_height_map(self.height_map_dir)
+        optic = optic.withPerturbedSurface("Detector", height_map)
+        return optic
+    
+    def _apply_figure_errors(self, optic):
+        if not self.add_figure_errors:
+            return optic
+
+        m1_error, m2_error, m3_error = load_mirror_figure(
+            self.mirror_figure_dir
+        )
+        optic = optic.withPerturbedSurface('M1', m1_error)
+        optic = optic.withPerturbedSurface('M3', m3_error)
+        optic = optic.withPerturbedSurface('M2', m2_error)
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
