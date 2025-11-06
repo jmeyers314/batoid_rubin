@@ -1,5 +1,6 @@
-from pathlib import Path
+from collections import namedtuple
 from functools import lru_cache
+from pathlib import Path
 
 import astropy.io.fits as fits
 import numpy as np
@@ -26,9 +27,7 @@ def _node_to_grid(nodex, nodey, nodez, grid_coords):
         4th slice is interpolated d2z/dxdy
     """
     interp = CloughTocher2DInterpolator(
-        np.array([nodex, nodey]).T,
-        nodez,
-        fill_value=0.0
+        np.array([nodex, nodey]).T, nodez, fill_value=0.0
     )
 
     x, y = grid_coords
@@ -37,18 +36,18 @@ def _node_to_grid(nodex, nodey, nodez, grid_coords):
     out = np.zeros((4, ny, nx))
     # Approximate derivatives with finite differences.  Make the finite
     # difference spacing equal to 1/10th the grid spacing.
-    dx = np.mean(np.diff(x))*1e-1
-    dy = np.mean(np.diff(y))*1e-1
+    dx = np.mean(np.diff(x)) * 1e-1
+    dy = np.mean(np.diff(y)) * 1e-1
     x, y = np.meshgrid(x, y)
     out[0] = interp(x, y)
-    out[1] = (interp(x+dx, y) - interp(x-dx, y))/(2*dx)
-    out[2] = (interp(x, y+dy) - interp(x, y-dy))/(2*dy)
+    out[1] = (interp(x + dx, y) - interp(x - dx, y)) / (2 * dx)
+    out[2] = (interp(x, y + dy) - interp(x, y - dy)) / (2 * dy)
     out[3] = (
-        interp(x+dx, y+dy) -
-        interp(x-dx, y+dy) -
-        interp(x+dx, y-dy) +
-        interp(x-dx, y-dy)
-    )/(4*dx*dy)
+        interp(x + dx, y + dy)
+        - interp(x - dx, y + dy)
+        - interp(x + dx, y - dy)
+        + interp(x - dx, y - dy)
+    ) / (4 * dx * dy)
 
     # Zero out the central hole
     r = np.hypot(x, y)
@@ -79,10 +78,35 @@ def _fits_cache(datadir, fn):
 
 
 def attach_attr(**kwargs):
-    """Decorator for attaching attributes to functions
-    """
+    """Decorator for attaching attributes to functions"""
+
     def inner(f):
         for k, v in kwargs.items():
             setattr(f, k, v)
         return f
+
     return inner
+
+
+def resolve_data_dir(directory):
+    """Try to resolve a data directory by checking local, datadir, or downloading from Zenodo."""
+    if directory.is_dir():
+        return directory
+
+    from . import datadir
+
+    candidate = datadir / directory
+    if candidate.is_dir():
+        return candidate
+
+    # Try Zenodo
+    from .data.download_rubin_data import download_rubin_data, zenodo_dois
+
+    if directory.name in zenodo_dois:
+        args = namedtuple("Args", ["dataset", "outdir"])
+        args.dataset = directory.name
+        args.outdir = None
+        download_rubin_data(args)
+        return datadir / directory
+
+    raise ValueError(f"Cannot infer directory: {directory}")

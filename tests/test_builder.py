@@ -8,6 +8,8 @@ import numpy as np
 
 fea_dir = Path(batoid_rubin.datadir) / "fea_legacy"
 bend_dir = Path(batoid_rubin.datadir) / "bend"
+height_map_dir = Path(batoid_rubin.datadir) / "height_map"
+mirror_figure_dir = Path(batoid_rubin.datadir) / "mirror_figure"
 
 zen = 30 * galsim.degrees
 rot = 15 * galsim.degrees
@@ -15,7 +17,7 @@ rot = 15 * galsim.degrees
 
 def test_builder():
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
-    builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir, height_map_dir, mirror_figure_dir)
     builder = (
         builder
         .with_m1m3_gravity(zen)

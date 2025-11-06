@@ -15,6 +15,8 @@ zenodo_dois = {
     "fea_legacy": 8384326,
     "bend": 8384775,
     "bend_ptt": 8384781,
+    "mirror_figure": 17525044,
+    "height_map": 17527073,
 }
 
 
