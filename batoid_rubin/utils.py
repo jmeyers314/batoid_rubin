@@ -1,8 +1,6 @@
 from pathlib import Path
 from functools import lru_cache
 
-import os
-import h5py
 import astropy.io.fits as fits
 import numpy as np
 from scipy.interpolate import CloughTocher2DInterpolator
