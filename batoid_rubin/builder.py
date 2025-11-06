@@ -11,7 +11,7 @@ import galsim
 import numpy as np
 import yaml
 
-from .utils import _node_to_grid, _fits_cache, attach_attr, resolve_data_dir, load_and_clip_m2_surface, read_h5_map
+from .utils import _node_to_grid, _fits_cache, attach_attr, resolve_data_dir
 
 
 BendingMode = namedtuple(
@@ -345,23 +345,26 @@ def transform_zernike(zernike, R_outer, R_inner):
 
 @lru_cache(maxsize=4)
 def load_mirror_figure(mirror_figure_dir):
-    x_m1 = np.linspace(-4.18, 4.18, 986)
-    y_m1 = np.linspace(-4.18, 4.18, 986)
-    m1s = read_h5_map(Path(mirror_figure_dir), 'm1_figure_error.h5')
-    m1s = np.nan_to_num(m1s, nan=0.0)
-    m1_error = batoid.Bicubic(x_m1, y_m1, m1s)
+    coords = fits.getdata(f"{mirror_figure_dir}/M1_figure_coords.fits.gz")
+    # coords are a meshgrid, so need the original 1D array
+    x_m1 = coords[0][0, :] 
+    y_m1 = coords[1][:, 0]
+    m1_surface = fits.getdata(f"{mirror_figure_dir}/M1_figure_surface.fits.gz") 
+    m1_error = batoid.Bicubic(x_m1, y_m1, m1_surface)
 
-    x_m3 = np.linspace(-2.508, 2.508, 1006)
-    y_m3 = np.linspace(-2.508, 2.508, 1006)
-    m3s = read_h5_map(Path(mirror_figure_dir), 'm3_figure_error.h5')
-    m3s = np.nan_to_num(m3s, nan=0.0)
-    m3_error = batoid.Bicubic(x_m3, y_m3, m3s)
+    coords = fits.getdata(f"{mirror_figure_dir}/M3_figure_coords.fits.gz")
+    # coords are a meshgrid, so need the original 1D array
+    x_m3 = coords[0][0, :] 
+    y_m3 = coords[1][:, 0]
+    m3_surface = fits.getdata(f"{mirror_figure_dir}/M3_figure_surface.fits.gz") 
+    m3_error = batoid.Bicubic(x_m3, y_m3, m3_surface)
 
-    x_m2 = np.linspace(-1.71, 1.71, 685)
-    y_m2 = np.linspace(-1.71, 1.71, 685)
-    m2s = load_and_clip_m2_surface(Path(mirror_figure_dir), 'm2_figure_error.mat')
-    m2s = np.nan_to_num(m2s, nan=0.0)
-    m2_error = batoid.Bicubic(x_m2, y_m2, m2s)
+    coords = fits.getdata(f"{mirror_figure_dir}/M2_figure_coords.fits.gz")
+    # coords are a meshgrid, so need the original 1D array
+    x_m2 = coords[0][0, :] 
+    y_m2 = coords[1][:, 0]
+    m2_surface = fits.getdata(f"{mirror_figure_dir}/M2_figure_surface.fits.gz") 
+    m2_error = batoid.Bicubic(x_m2, y_m2, m2_surface)
 
     return m1_error, m2_error, m3_error
 

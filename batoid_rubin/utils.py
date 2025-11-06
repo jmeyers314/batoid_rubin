@@ -109,26 +109,3 @@ def resolve_data_dir(directory):
         return datadir / directory
 
     raise ValueError(f"Cannot infer directory: {directory}")
-
-def read_h5_map(path, filename, dataset = '/dataset'):
-    h5file = os.path.join(path, filename)
-    f = h5py.File(h5file,'r')
-    data = np.rot90(f[dataset], 1) # so that we can use imshow(data, origin='lower')
-    return data*1e-6
-
-def load_and_clip_m2_surface(path, file_path):
-    import scipy.io
-    data = scipy.io.loadmat(os.path.join(path, file_path))
-
-    s = data['s']
-    m2_data = s['z'][0][0] * 1e-9  # Convert from nm to m
-
-    valid_mask = np.isfinite(m2_data)
-    valid_rows = np.any(valid_mask, axis=1)
-    valid_cols = np.any(valid_mask, axis=0)
-
-    row_min, row_max = np.where(valid_rows)[0][[0, -1]]
-    col_min, col_max = np.where(valid_cols)[0][[0, -1]]
-    m2_clipped = m2_data[row_min:row_max+1, col_min:col_max+1]
-
-    return m2_clipped
