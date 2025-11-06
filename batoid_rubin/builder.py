@@ -368,6 +368,7 @@ def load_mirror_figure(mirror_figure_dir):
 
     return m1_error, m2_error, m3_error
 
+@lru_cache(maxsize=4)
 def _load_height_map(height_map_dir):
     height_table = Table.read(Path(height_map_dir) / 'LsstCam_focal_plane_heights_interpolated.fits.gz')
     x = np.unique(height_table["x"].to("m").value)
@@ -649,7 +650,8 @@ class LSSTBuilder:
         mirror_figure_dir="mirror_figure",
         use_m1m3_modes=None,
         use_m2_modes=None,
-        add_figure_errors=True,
+        use_chip_heights=True,
+        use_mirror_figure=True,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -679,8 +681,10 @@ class LSSTBuilder:
             and the 13th and 14th AOS degrees of freedom will be the 4th and 2nd
             M2 bending modes.  If None, then use the modes in the order
             specified in the bending mode directory.
-        add_figure_errors : bool, optional
-            Include figure errors in the model.  Default is False.
+        use_chip_heights : bool, optional
+            Include chip height errors in the model.  Default is True.
+        use_mirror_figure : bool, optional
+            Include figure errors in the model.  Default is True.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -729,7 +733,8 @@ class LSSTBuilder:
         else:
             raise ValueError("Unsupported optic")
 
-        self.add_figure_errors = add_figure_errors
+        self.use_chip_heights = use_chip_heights
+        self.use_mirror_figure = use_mirror_figure
 
         # "Input" variables.
         self.m1m3_zenith = None
@@ -1237,12 +1242,15 @@ class LSSTBuilder:
         return optic
     
     def _apply_height_map(self, optic):
+        if not self.use_chip_heights:
+            return optic
+
         height_map = _load_height_map(self.height_map_dir)
         optic = optic.withPerturbedSurface("Detector", height_map)
         return optic
     
     def _apply_figure_errors(self, optic):
-        if not self.add_figure_errors:
+        if not self.use_mirror_figure:
             return optic
 
         m1_error, m2_error, m3_error = load_mirror_figure(
