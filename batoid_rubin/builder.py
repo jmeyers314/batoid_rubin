@@ -643,10 +643,10 @@ class LSSTBuilder:
     def __init__(
         self,
         fiducial,
-        fea_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/fea_legacy",
-        bend_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/bend_legacy",
+        fea_dir="fea_legacy",
+        bend_dir="bend",
         height_map_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/height_map",
-        mirror_figure_dir="/sdf/home/g/gmegias/aos/batoid_rubin/batoid_rubin/data/mirror_figure",
+        mirror_figure_dir="mirror_figure",
         use_m1m3_modes=None,
         use_m2_modes=None,
         add_figure_errors=True,
