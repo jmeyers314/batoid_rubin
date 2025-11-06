@@ -369,7 +369,7 @@ def load_mirror_figure(mirror_figure_dir):
     return m1_error, m2_error, m3_error
 
 def _load_height_map(height_map_dir):
-    height_table = Table.read(Path(height_map_dir) / 'LsstCam_focal_plane_heights_interpolated.fits')
+    height_table = Table.read(Path(height_map_dir) / 'LsstCam_focal_plane_heights_interpolated.fits.gz')
     x = np.unique(height_table["x"].to("m").value)
     y = np.unique(height_table["y"].to("m").value)
     z = height_table["z"].to("m").value.reshape(x.size, y.size)
