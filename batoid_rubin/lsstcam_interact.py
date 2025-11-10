@@ -1,3 +1,5 @@
+from contextlib import ExitStack
+
 import batoid
 import galsim
 import matplotlib.pyplot as plt
@@ -171,6 +173,7 @@ class LSSTCamInteract:
             [VBox(control) for control in controls]
         )
         self.view = self._view()
+        self._pause_updates = False
 
     def handle_event(self, change, attr):
         if isinstance(attr, tuple):
@@ -179,7 +182,8 @@ class LSSTCamInteract:
             setattr(self, attr[0], current)
         else:
             setattr(self, attr, change["new"])
-        self.update()
+        if not self._pause_updates:
+            self.update()
 
     def _view(self):
         cornerspec = [["R00", "R40"], ["R04", "R44"]]
@@ -285,6 +289,7 @@ class LSSTCamInteract:
         dof += [self.cam_dz, self.cam_dx, self.cam_dy, self.cam_Rx, self.cam_Ry]
         dof += self.m1m3_vals
         dof += self.m2_vals
+        dof = np.array(dof)
 
         builder = self.builder.with_aos_dof(dof)
         telescope = builder.build()
@@ -292,10 +297,34 @@ class LSSTCamInteract:
             sensor.draw(telescope, seeing=0.1, rng=1)
             sensor.draw_wf(telescope)
 
-    def set_m2_dz(self, m2_dz):
-        self.m2_dz = m2_dz
-        # Need to set the value of the control to match
-        self.m2_dz_control.value = m2_dz
+    def set_dof(self, dof):
+        self._pause_updates = True
+        try:
+            controls = []
+            for i, k in enumerate(["dz", "dx", "dy", "Rx", "Ry"]):
+                controls.append(getattr(self, "m2_"+k+"_control"))
+                controls.append(getattr(self, "cam_"+k+"_control"))
+            for i in range(20):
+                controls.append(getattr(self, f"m1m3_B{i+1}_control"))
+                controls.append(getattr(self, f"m2_B{i+1}_control"))
+
+            with ExitStack() as stack:
+                for control in controls:
+                    stack.enter_context(control.hold_trait_notifications())
+
+                for i, k in enumerate(["dz", "dx", "dy", "Rx", "Ry"]):
+                    control = getattr(self, "m2_"+k+"_control")
+                    control.value = dof[i]
+
+                    control = getattr(self, "cam_"+k+"_control")
+                    control.value = dof[i+5]
+                for i in range(20):
+                    control = getattr(self, f"m1m3_B{i+1}_control")
+                    control.value = dof[10+i]
+                    control = getattr(self, f"m2_B{i+1}_control")
+                    control.value = dof[30+i]
+        finally:
+            self._pause_updates = False
         self.update()
 
     def display(self):
