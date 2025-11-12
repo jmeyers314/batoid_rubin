@@ -117,7 +117,7 @@ class LSSTCamInteract:
 
         # widget variables
         kwargs = {
-            "layout": {"width": "150px"},
+            "layout": {"width": "175px"},
             "style": {"description_width": "initial"},
             "format": ".3f",
         }
@@ -297,7 +297,31 @@ class LSSTCamInteract:
             sensor.draw(telescope, seeing=0.1, rng=1)
             sensor.draw_wf(telescope)
 
-    def set_dof(self, dof):
+    def set_dof(self, dof, flip_x=False, flip_y=False, flip_z=False, flip_M1M3=False, flip_M2=False, use_degrees=False):
+        dof = np.array(dof)
+        if flip_x:
+            dof[1] *= -1
+            dof[3] *= -1
+            dof[6] *= -1
+            dof[8] *= -1
+        if flip_y:
+            dof[2] *= -1
+            dof[4] *= -1
+            dof[7] *= -1
+            dof[9] *= -1
+        if flip_z:
+            dof[0] *= -1
+            dof[5] *= -1
+        if flip_M1M3:
+            dof[10:30] *= -1
+        if flip_M2:
+            dof[30:50] *= -1
+        if use_degrees:
+            dof[3] *= 3600
+            dof[4] *= 3600
+            dof[8] *= 3600
+            dof[9] *= 3600
+
         self._pause_updates = True
         try:
             controls = []
