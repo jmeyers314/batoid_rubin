@@ -216,9 +216,131 @@ def test_subsys_dof():
         np.testing.assert_equal(len(builder1.dof), 10+len(use_m1m3_modes)+len(use_m2_modes))
 
 
+def test_coord_sys():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+    with np.testing.assert_warns(FutureWarning):
+        builder = batoid_rubin.builder.LSSTBuilder(
+            fiducial,
+            dof_coord_system=None,
+            flip_m1m3_bending_modes=False,
+            flip_m2_bending_modes=True
+        )
+    builder_zcs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        flip_m1m3_bending_modes=False,
+        flip_m2_bending_modes=True
+    )
+    builder_ocs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        flip_m1m3_bending_modes=False,
+        flip_m2_bending_modes=True
+    )
+
+    m2_dz = 0.1
+    m2_dx = 10.0
+    m2_dy = -10.0
+    m2_rx = 0.01
+    m2_ry = -0.01
+    cam_dz = 0.2
+    cam_dx = -20.0
+    cam_dy = 20.0
+    cam_rx = -0.02
+    cam_ry = 0.02
+
+    scope1 = builder.with_m2_rigid(
+        dz=m2_dz,
+        dx=m2_dx,
+        dy=m2_dy,
+        rx=m2_rx*galsim.arcsec,
+        ry=m2_ry*galsim.arcsec
+    ).with_camera_rigid(
+        dz=cam_dz,
+        dx=cam_dx,
+        dy=cam_dy,
+        rx=cam_rx*galsim.arcsec,
+        ry=cam_ry*galsim.arcsec
+    ).build()  # Default is ZCS
+
+    # Explicit ZCS
+    scope2 = builder_zcs.with_m2_rigid(
+        dz=m2_dz,
+        dx=m2_dx,
+        dy=m2_dy,
+        rx=m2_rx*galsim.arcsec,
+        ry= m2_ry*galsim.arcsec
+    ).with_camera_rigid(
+        dz=cam_dz,
+        dx=cam_dx,
+        dy=cam_dy,
+        rx=cam_rx*galsim.arcsec,
+        ry=cam_ry*galsim.arcsec
+    ).build()
+
+    # OCS
+    scope3 = builder_ocs.with_m2_rigid(
+        dz=m2_dz,
+        dx=m2_dx,
+        dy=m2_dy,
+        rx=m2_rx*galsim.arcsec,
+        ry=m2_ry*galsim.arcsec
+    ).with_camera_rigid(
+        dz=cam_dz,
+        dx=cam_dx,
+        dy=cam_dy,
+        rx=cam_rx*galsim.arcsec,
+        ry=cam_ry*galsim.arcsec
+    ).build()
+
+    # Manually flip OCS -> ZCS
+    scope4 = builder_ocs.with_m2_rigid(
+        dz=-m2_dz,
+        dx=-m2_dx,
+        dy=m2_dy,
+        rx=-m2_rx*galsim.arcsec,
+        ry=m2_ry*galsim.arcsec
+    ).with_camera_rigid(
+        dz=-cam_dz,
+        dx=-cam_dx,
+        dy=cam_dy,
+        rx=-cam_rx*galsim.arcsec,
+        ry=cam_ry*galsim.arcsec
+    ).build()
+
+    trays1 = scope1.trace(rays.copy())
+    trays2 = scope2.trace(rays.copy())
+    trays3 = scope3.trace(rays.copy())
+    trays4 = scope4.trace(rays.copy())
+
+    np.testing.assert_equal(trays1.r, trays2.r)
+    np.testing.assert_equal(trays1.v, trays2.v)
+    np.testing.assert_equal(trays1.vignetted, trays2.vignetted)
+    np.testing.assert_equal(trays1.failed, trays2.failed)
+
+    assert not np.allclose(trays1.x, trays3.x, atol=1e-12, rtol=0)
+    assert not np.allclose(trays1.y, trays3.y, atol=1e-12, rtol=0)
+    # z's may be close since intersecting a Detector plane
+    assert not np.allclose(trays1.v, trays3.v, atol=1e-12, rtol=0)
+
+    np.testing.assert_equal(trays1.r, trays4.r)
+    np.testing.assert_equal(trays1.v, trays4.v)
+    np.testing.assert_equal(trays1.vignetted, trays4.vignetted)
+    np.testing.assert_equal(trays1.failed, trays4.failed)
+
+
 if __name__ == "__main__":
     test_builder()
     test_attr()
     test_ep_phase()
     test_modes_permutation()
     test_subsys_dof()
+    test_coord_sys()
