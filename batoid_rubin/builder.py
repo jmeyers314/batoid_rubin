@@ -652,6 +652,7 @@ class LSSTBuilder:
         ccd_height_map_dir="ccd_height_map",
         use_m1m3_modes=None,
         use_m2_modes=None,
+        dof_coord_system=None,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -681,6 +682,12 @@ class LSSTBuilder:
             and the 13th and 14th AOS degrees of freedom will be the 4th and 2nd
             M2 bending modes.  If None, then use the modes in the order
             specified in the bending mode directory.
+        dof_coord_system : {"ZCS", "OCS"}, optional
+            Coordinate system for the AOS hexapod degrees of freedom. "ZCS"
+            means Zemax Coordinate System, "OCS" means Optical Coordinate
+            System. See https://sitcomtn-003.lsst.io/ for details. If None, then
+            defaults to "ZCS", but warns that this will change to "OCS" in
+            a future release.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -708,6 +715,19 @@ class LSSTBuilder:
             self.m1m3_dof_indices.stop,
             self.m1m3_dof_indices.stop+len(self.use_m2_modes),
         )
+
+        if dof_coord_system is None:
+            import warnings
+            warnings.warn(
+                "Default dof_coord_system will change from ZCS to OCS in a future"
+                " release. Please explicitly set dof_coord_system to avoid this"
+                " warning.",
+                FutureWarning
+            )
+            dof_coord_system = "ZCS"
+        if dof_coord_system not in ["ZCS", "OCS"]:
+            raise ValueError("Invalid dof_coord_system")
+        self.dof_coord_system = dof_coord_system
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -990,7 +1010,7 @@ class LSSTBuilder:
         """
         assert len(dof) == 10+len(self.use_m1m3_modes)+len(self.use_m2_modes)
         ret = copy(self)
-        ret.dof = dof
+        ret.dof = dof.copy()
         return ret
 
     @attach_attr(
@@ -1280,15 +1300,24 @@ class LSSTBuilder:
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
-        dof = self.dof
+        dof = self.dof.copy()
+        if self.dof_coord_system == "ZCS":
+            # Flip x, z and rotations about x, z.
+            dof[0] = -dof[0]
+            dof[1] = -dof[1]
+            dof[3] = -dof[3]
+            dof[5] = -dof[5]
+            dof[6] = -dof[6]
+            dof[8] = -dof[8]
+
         if np.any(dof[0:3]):
             optic = optic.withGloballyShiftedOptic(
                 "M2",
-                np.array([-dof[1], dof[2], -dof[0]])*1e-6
+                np.array([dof[1], dof[2], dof[0]])*1e-6
             )
 
         if np.any(dof[3:5]):
-            rx = batoid.RotX(np.deg2rad(-dof[3]/3600))
+            rx = batoid.RotX(np.deg2rad(dof[3]/3600))
             ry = batoid.RotY(np.deg2rad(dof[4]/3600))
             optic = optic.withLocallyRotatedOptic(
                 "M2",
@@ -1298,11 +1327,11 @@ class LSSTBuilder:
         if np.any(dof[5:8]):
             optic = optic.withGloballyShiftedOptic(
                 self.cam_name,
-                np.array([-dof[6], dof[7], -dof[5]])*1e-6
+                np.array([dof[6], dof[7], dof[5]])*1e-6
             )
 
         if np.any(dof[8:10]):
-            rx = batoid.RotX(np.deg2rad(-dof[8]/3600))
+            rx = batoid.RotX(np.deg2rad(dof[8]/3600))
             ry = batoid.RotY(np.deg2rad(dof[9]/3600))
             optic = optic.withLocallyRotatedOptic(
                 self.cam_name,
