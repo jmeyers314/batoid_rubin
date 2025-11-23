@@ -15,7 +15,13 @@ rot = 15 * galsim.degrees
 
 def test_builder():
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
-    builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    builder = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        fea_dir,
+        bend_dir,
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
+    )
     builder = (
         builder
         .with_m1m3_gravity(zen)
@@ -32,7 +38,11 @@ def test_builder():
     telescope = builder.build()
 
     # Check that default dirs work
-    builder2 = batoid_rubin.LSSTBuilder(fiducial)
+    builder2 = batoid_rubin.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
+    )
     builder2 = (
         builder2
         .with_m1m3_gravity(zen)
@@ -49,7 +59,11 @@ def test_builder():
     assert telescope == telescope2
 
     # Check float interface too.
-    builder3 = batoid_rubin.LSSTBuilder(fiducial)
+    builder3 = batoid_rubin.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
+    )
     builder3 = (
         builder3
         .with_m1m3_gravity(zen.rad)
@@ -67,13 +81,23 @@ def test_builder():
 
 
 def test_attr():
-    builder = batoid_rubin.LSSTBuilder(batoid.Optic.fromYaml("LSST_r.yaml"))
+    builder = batoid_rubin.LSSTBuilder(
+        batoid.Optic.fromYaml("LSST_r.yaml"),
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
+    )
     assert hasattr(builder.with_m1m3_gravity, "_req_params")
 
 
 def test_ep_phase():
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
-    builder = batoid_rubin.builder.LSSTBuilder(fiducial, fea_dir, bend_dir)
+    builder = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        fea_dir,
+        bend_dir,
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
+    )
     builder = (
         builder
         .with_m1m3_gravity(zen)
@@ -116,7 +140,9 @@ def test_modes_permutation():
     builder1 = batoid_rubin.builder.LSSTBuilder(
         fiducial,
         use_m1m3_modes=list(range(20)),
-        use_m2_modes=list(range(20))
+        use_m2_modes=list(range(20)),
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
     )
     rays = batoid.RayVector.asPolar(
         optic=fiducial,
@@ -134,7 +160,9 @@ def test_modes_permutation():
         builder2 = batoid_rubin.builder.LSSTBuilder(
             fiducial,
             use_m1m3_modes=p1,
-            use_m2_modes=p2
+            use_m2_modes=p2,
+            dof_coord_system="ZCS",
+            flip_m2_bending_modes=True
         )
         rigid_dof = np.zeros(10)
         m1m3_dof = rng.uniform(-1e-6, 1e-6, size=20)
@@ -170,7 +198,9 @@ def test_subsys_dof():
     builder = batoid_rubin.builder.LSSTBuilder(
         fiducial,
         use_m1m3_modes=use_m1m3_modes,
-        use_m2_modes=use_m2_modes
+        use_m2_modes=use_m2_modes,
+        dof_coord_system="ZCS",
+        flip_m2_bending_modes=True
     )
     for _ in range(10):
         m2_dz = rng.uniform(-1, 1)
