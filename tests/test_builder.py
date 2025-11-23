@@ -337,6 +337,105 @@ def test_coord_sys():
     np.testing.assert_equal(trays1.failed, trays4.failed)
 
 
+def test_mirror_flip():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+
+    rng = np.random.default_rng(57721566)
+
+    with np.testing.assert_warns(FutureWarning):
+        builder = batoid_rubin.builder.LSSTBuilder(
+            fiducial,
+            dof_coord_system="OCS",
+        )
+    builder_t_t = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        flip_m1m3_bending_modes=True,
+        flip_m2_bending_modes=True,
+    )
+    builder_t_f = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        flip_m1m3_bending_modes=True,
+        flip_m2_bending_modes=False,
+    )
+    builder_f_t = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        flip_m1m3_bending_modes=False,
+        flip_m2_bending_modes=True,
+    )
+    builder_f_f = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        flip_m1m3_bending_modes=False,
+        flip_m2_bending_modes=False,
+    )
+
+    m1m3_dof = rng.uniform(-1e-6, 1e-6, size=20)
+    m2_dof = rng.uniform(-1e-6, 1e-6, size=20)
+
+    scope1 = builder.with_m1m3_bend(m1m3_dof).with_m2_bend(m2_dof).build()
+    scope2 = builder_f_t.with_m1m3_bend(m1m3_dof).with_m2_bend(m2_dof).build()
+    trays1 = scope1.trace(rays.copy())
+    trays2 = scope2.trace(rays.copy())
+    np.testing.assert_equal(trays1.r, trays2.r)
+    np.testing.assert_equal(trays1.v, trays2.v)
+    np.testing.assert_equal(trays1.vignetted, trays2.vignetted)
+    np.testing.assert_equal(trays1.failed, trays2.failed)
+
+    scope3 = builder_t_f.with_m1m3_bend(m1m3_dof).with_m2_bend(m2_dof).build()
+    trays3 = scope3.trace(rays.copy())
+
+    assert not np.allclose(trays1.x, trays3.x, atol=1e-12, rtol=0)
+    assert not np.allclose(trays1.y, trays3.y, atol=1e-12, rtol=0)
+    # z's may be close since intersecting a Detector plane
+    assert not np.allclose(trays1.v, trays3.v, atol=1e-12, rtol=0)
+    # Manually flip; should be equivalent to f_t
+    scope4 = builder_t_f.with_m1m3_bend(-m1m3_dof).with_m2_bend(-m2_dof).build()
+    trays4 = scope4.trace(rays.copy())
+    np.testing.assert_equal(trays1.r, trays4.r)
+    np.testing.assert_equal(trays1.v, trays4.v)
+    np.testing.assert_equal(trays1.vignetted, trays4.vignetted)
+    np.testing.assert_equal(trays1.failed, trays4.failed)
+
+    scope5 = builder_t_t.with_m1m3_bend(m1m3_dof).with_m2_bend(m2_dof).build()
+    trays5 = scope5.trace(rays.copy())
+    assert not np.allclose(trays1.x, trays5.x, atol=1e-12, rtol=0)
+    assert not np.allclose(trays1.y, trays5.y, atol=1e-12, rtol=0)
+    # z's may be close since intersecting a Detector plane
+    assert not np.allclose(trays1.v, trays5.v, atol=1e-12, rtol=0)
+    # Manually flip
+    scope6 = builder_t_t.with_m1m3_bend(-m1m3_dof).with_m2_bend(m2_dof).build()
+    trays6 = scope6.trace(rays.copy())
+    np.testing.assert_equal(trays1.r, trays6.r)
+    np.testing.assert_equal(trays1.v, trays6.v)
+    np.testing.assert_equal(trays1.vignetted, trays6.vignetted)
+    np.testing.assert_equal(trays1.failed, trays6.failed)
+
+    scope7 = builder_f_f.with_m1m3_bend(m1m3_dof).with_m2_bend(m2_dof).build()
+    trays7 = scope7.trace(rays.copy())
+    assert not np.allclose(trays1.x, trays7.x, atol=1e-12, rtol=0)
+    assert not np.allclose(trays1.y, trays7.y, atol=1e-12, rtol=0)
+    # z's may be close since intersecting a Detector plane
+    assert not np.allclose(trays1.v, trays7.v, atol=1e-12, rtol=0)
+    # Manually flip
+    scope8 = builder_f_f.with_m1m3_bend(m1m3_dof).with_m2_bend(-m2_dof).build()
+    trays8 = scope8.trace(rays.copy())
+    np.testing.assert_equal(trays1.r, trays8.r)
+    np.testing.assert_equal(trays1.v, trays8.v)
+    np.testing.assert_equal(trays1.vignetted, trays8.vignetted)
+    np.testing.assert_equal(trays1.failed, trays8.failed)
+
+
 if __name__ == "__main__":
     test_builder()
     test_attr()
@@ -344,3 +443,4 @@ if __name__ == "__main__":
     test_modes_permutation()
     test_subsys_dof()
     test_coord_sys()
+    test_mirror_flip()
