@@ -8,6 +8,7 @@ import astropy.io.fits as fits
 import batoid
 import galsim
 import numpy as np
+import warnings
 import yaml
 
 from .utils import _node_to_grid, _fits_cache, attach_attr, ensure_data_dir
@@ -653,6 +654,8 @@ class LSSTBuilder:
         use_m1m3_modes=None,
         use_m2_modes=None,
         dof_coord_system=None,
+        flip_m1m3_bending_modes=False,
+        flip_m2_bending_modes=None,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -688,6 +691,12 @@ class LSSTBuilder:
             System. See https://sitcomtn-003.lsst.io/ for details. If None, then
             defaults to "ZCS", but warns that this will change to "OCS" in
             a future release.
+        flip_m1m3_bending_modes : bool, optional
+            Whether to flip the sign of the M1M3 bending modes. This is needed
+            to match the convention used in the Rubin AOS. Default is False.
+        flip_m2_bending_modes : bool, optional
+            Whether to flip the sign of the M2 bending modes. This is needed
+            to match the convention used in the Rubin AOS. Default is True.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -717,7 +726,6 @@ class LSSTBuilder:
         )
 
         if dof_coord_system is None:
-            import warnings
             warnings.warn(
                 "Default dof_coord_system will change from ZCS to OCS in a future"
                 " release. Please explicitly set dof_coord_system to avoid this"
@@ -728,6 +736,17 @@ class LSSTBuilder:
         if dof_coord_system not in ["ZCS", "OCS"]:
             raise ValueError("Invalid dof_coord_system")
         self.dof_coord_system = dof_coord_system
+
+        if flip_m2_bending_modes is None:
+            warnings.warn(
+                "Default flip_m2_bending_modes will change from True to False in a"
+                " future release. Please explicitly set flip_m2_bending_modes to avoid"
+                " this warning.",
+                FutureWarning
+            )
+            flip_m2_bending_modes = True
+        self.flip_m1m3_bending_modes = flip_m1m3_bending_modes
+        self.flip_m2_bending_modes = flip_m2_bending_modes
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -1421,6 +1440,10 @@ class LSSTBuilder:
                 "M3"
             )
 
+            if self.flip_m1m3_bending_modes:
+                bend1 = RealizedBend(-bend1.zk, -bend1.grid)
+                bend3 = RealizedBend(-bend3.zk, -bend3.grid)
+
             m1_zk += transform_zernike(bend1.zk, R_outer=4.18, R_inner=2.558)
             m3_zk += transform_zernike(bend3.zk, R_outer=2.508, R_inner=0.55)
 
@@ -1525,6 +1548,14 @@ class LSSTBuilder:
                 tuple(self.use_m2_modes),
                 "M2"
             )
+
+            if self.flip_m2_bending_modes:
+                # The original files had the opposite sign convention, so we actually
+                # only flip if flip_m2_bending_modes is False!
+                pass
+            else:
+                bend2 = RealizedBend(-bend2.zk, -bend2.grid)
+
             m2_zk += transform_zernike(bend2.zk, R_outer=1.71, R_inner=0.9)
             m2_grid += bend2.grid
 
