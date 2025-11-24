@@ -1664,6 +1664,9 @@ LSSTBuilder._opt_params = {
     "bend_dir":str,
     "use_m1m3_modes":None,
     "use_m2_modes":None,
+    "dof_coord_system":str,
+    "flip_m1m3_bending_modes":bool,
+    "flip_m2_bending_modes":bool,
 }
 # Ignore with_* args in the ImSim config dict
 LSSTBuilder._ignore_params = {
