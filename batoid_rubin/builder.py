@@ -10,7 +10,7 @@ import galsim
 import numpy as np
 import yaml
 
-from .utils import _node_to_grid, _fits_cache, attach_attr
+from .utils import _node_to_grid, _fits_cache, attach_attr, ensure_data_dir
 
 
 BendingMode = namedtuple(
@@ -648,57 +648,19 @@ class LSSTBuilder:
         # Number of bending modes is inferred from content of bend_dir.
         # These can effect the sizes of intermediate numpy arrays, and also the
         # required inputs for the with_aos_dof and with_*_forces methods.
-
         self.fiducial = fiducial
-        fea_dir = Path(fea_dir)
-        bend_dir = Path(bend_dir)
-
-        if not fea_dir.is_dir():
-            # See if we can find the data in the batoid_rubin data directory.
-            from . import datadir
-            fea_dir = datadir / fea_dir
-            if not fea_dir.is_dir():
-                # See if we can download the data from Zenodo.
-                from .data.download_rubin_data import (
-                    download_rubin_data, zenodo_dois
-                )
-                if fea_dir.name in zenodo_dois:
-                    args = namedtuple("Args", ["dataset", "outdir"])
-                    args.dataset = fea_dir.parts[-1]
-                    args.outdir = None
-                    download_rubin_data(args)
-                else:
-                    raise ValueError("Cannot infer fea_dir.")
-
-        if not bend_dir.is_dir():
-            # See if we can find the data in the batoid_rubin data directory.
-            from . import datadir
-            bend_dir = datadir / bend_dir
-            if not bend_dir.is_dir():
-                # See if we can download the data from Zenodo.
-                from .data.download_rubin_data import (
-                    download_rubin_data, zenodo_dois
-                )
-                if bend_dir.name in zenodo_dois:
-                    args = namedtuple("Args", ["dataset", "outdir"])
-                    args.dataset = bend_dir.parts[-1]
-                    args.outdir = None
-                    download_rubin_data(args)
-                else:
-                    raise ValueError("Cannot infer bend_dir.")
-
-        self.fea_dir = fea_dir
-        self.bend_dir = bend_dir
+        self.fea_dir = ensure_data_dir(fea_dir)
+        self.bend_dir = ensure_data_dir(bend_dir)
 
         if use_m1m3_modes is None:
-            with open(bend_dir / "bend.yaml") as f:
+            with open(self.bend_dir / "bend.yaml") as f:
                 config = yaml.safe_load(f)
                 use_m1m3_modes = config['use_m1m3_modes']
         self.use_m1m3_modes = use_m1m3_modes
         self.m1m3_dof_indices = slice(10, 10+len(self.use_m1m3_modes))
 
         if use_m2_modes is None:
-            with open(bend_dir / "bend.yaml") as f:
+            with open(self.bend_dir / "bend.yaml") as f:
                 config = yaml.safe_load(f)
                 use_m2_modes = config['use_m2_modes']
         self.use_m2_modes = use_m2_modes
