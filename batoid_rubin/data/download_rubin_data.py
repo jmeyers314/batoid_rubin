@@ -2,6 +2,7 @@ from pathlib import Path
 import requests
 import zipfile
 import io
+import os
 
 try:
     from tqdm import tqdm
@@ -25,14 +26,15 @@ def download_rubin_data(args):
 
     api = r"https://zenodo.org/api/records/"
     url = f"{api}{DOI}/files-archive"
-    # Download the ZIP file
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
 
-    if not args.outdir:
-        outdir = Path(__file__).parent / args.dataset
-    else:
+    if args.outdir is not None:
         outdir = Path(args.outdir)
+    else:
+        env_dir = os.environ.get("BATOID_RUBIN_DATA_DIR")
+        if env_dir:
+            outdir = Path(env_dir) / args.dataset
+        else:
+            outdir = Path(__file__).parent / args.dataset
 
     # Download the ZIP file with progress bar
     response = requests.get(url, stream=True)
@@ -45,6 +47,9 @@ def download_rubin_data(args):
         desc="Downloading"
     ):
         buffer.write(data)
+
+    # Ensure output directory exists after successful download
+    outdir.mkdir(parents=True, exist_ok=True)
 
     # Unzip the downloaded content
     with zipfile.ZipFile(buffer) as z:

@@ -1,9 +1,44 @@
+from collections import namedtuple
+import os
 from pathlib import Path
 from functools import lru_cache
 
 import astropy.io.fits as fits
 import numpy as np
 from scipy.interpolate import CloughTocher2DInterpolator
+
+from .data.download_rubin_data import download_rubin_data, zenodo_dois
+
+
+def resolve_data_dir(directory):
+    """Resolve the canonical path for a data directory without downloading."""
+    directory = Path(directory)
+    if directory.is_dir():
+        return directory
+
+    env_dir = os.getenv("BATOID_RUBIN_DATA_DIR")
+    if env_dir is not None:
+        candidate = Path(env_dir) / directory
+        if candidate.is_dir():
+            return candidate
+        return candidate  # preferred location even if not yet populated
+
+    from . import datadir
+    return datadir / directory
+
+
+def ensure_data_dir(directory):
+    """Resolve data directory, downloading from Zenodo if necessary."""
+    resolved = resolve_data_dir(directory)
+    if resolved.is_dir():
+        return resolved
+    if resolved.name not in zenodo_dois:
+        raise ValueError(f"Cannot infer directory: {directory}")
+    args = namedtuple("Args", ["dataset", "outdir"])
+    args.dataset = resolved.name
+    args.outdir = resolved
+    download_rubin_data(args)
+    return resolved
 
 
 def _node_to_grid(nodex, nodey, nodez, grid_coords):
