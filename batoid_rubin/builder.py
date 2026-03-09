@@ -294,6 +294,19 @@ def m1m3_lut(fea_dir, zenith, error, seed):
 
 @lru_cache(maxsize=2)
 def det_height_maps(height_map_dir):
+    """Return detector height maps.
+
+        Parameters
+    ----------
+    height_map_dir : str
+        Directory containing the height map file.
+
+    Returns
+    -------
+    out : dict
+        Dictionary of det -> height map (as batoid.Bicubic).  Keys can either be
+        the detector number of name.
+    """
     hdul = fits.open(Path(height_map_dir) / "ccd_height_map.fits.gz")
     out = {}
     for hdu in hdul:
@@ -1180,6 +1193,10 @@ class LSSTBuilder:
         -------
         ret : SSTBuilder
             New builder with specified M1M3 extra forces.
+
+        Notes
+        -----
+        Will _not_ include any effects of ccd height map.
         """
         # Todo: should be able to index these by actuator ID too.
         ret = copy(self)
@@ -1187,6 +1204,13 @@ class LSSTBuilder:
         return ret
 
     def build(self):
+        """Build the optic.
+
+        Returns
+        -------
+        optic : batoid.Optic
+            The perturbed optic.
+        """
         optic = self.fiducial
         optic = self._apply_phase(optic)
         optic = self._apply_rigid_body_perturbations(optic)
@@ -1196,6 +1220,18 @@ class LSSTBuilder:
         return optic
 
     def build_det(self, det):
+        """Build the optic for a specific detector.
+
+        Parameters
+        ----------
+        det : str or int
+            The detector number of name.
+
+        Returns
+        -------
+        optic : batoid.Optic
+            The perturbed optic, including the ccd height map.
+        """
         optic = self.build()
         optic = self._apply_detector_perturbations(optic, det)
         return optic
