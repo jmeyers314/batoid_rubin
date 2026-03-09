@@ -292,6 +292,30 @@ def m1m3_lut(fea_dir, zenith, error, seed):
     return out
 
 
+@lru_cache(maxsize=2)
+def det_height_maps(height_map_dir):
+    hdul = fits.open(Path(height_map_dir) / "ccd_height_map.fits.gz")
+    out = {}
+    for hdu in hdul:
+        detnum = hdu.header.get("DETNUM")
+        detname = hdu.header.get("DETNAME")
+        xmin = hdu.header.get("XMIN")
+        xmax = hdu.header.get("XMAX")
+        ymin = hdu.header.get("YMIN")
+        ymax = hdu.header.get("YMAX")
+        xs = np.linspace(xmin, xmax, hdu.data.shape[1])
+        ys = np.linspace(ymin, ymax, hdu.data.shape[0])
+        zs = hdu.data
+        # Convert mm -> meters
+        xs *= 1e-3
+        ys *= 1e-3
+        zs *= 1e-3
+        surf = batoid.Bicubic(xs, ys, zs)
+        out[detnum] = surf
+        out[detname] = surf
+    return out
+
+
 def m1m3_force_to_surface(fea_dir, forces):
     """Convert M1M3 forces to surface displacements.
 
@@ -612,6 +636,7 @@ class LSSTBuilder:
         fiducial,
         fea_dir="fea_legacy",
         bend_dir="bend",
+        ccd_height_map_dir="ccd_height_map",
         use_m1m3_modes=None,
         use_m2_modes=None,
     ):
@@ -651,6 +676,8 @@ class LSSTBuilder:
         self.fiducial = fiducial
         self.fea_dir = ensure_data_dir(fea_dir)
         self.bend_dir = ensure_data_dir(bend_dir)
+        self._ccd_height_map_dir_raw = ccd_height_map_dir
+        self._ccd_height_map_dir = None
 
         if use_m1m3_modes is None:
             with open(self.bend_dir / "bend.yaml") as f:
@@ -701,6 +728,12 @@ class LSSTBuilder:
         self.dof = np.zeros(10+len(self.use_m1m3_modes)+len(self.use_m2_modes))
         self.extra_zk = None
         self.extra_zk_eps = None
+
+    @property
+    def ccd_height_map_dir(self):
+        if self._ccd_height_map_dir is None:
+            self._ccd_height_map_dir = ensure_data_dir(self._ccd_height_map_dir_raw)
+        return self._ccd_height_map_dir
 
     @attach_attr(
         _req_params={"zenith":galsim.Angle}
@@ -1160,6 +1193,19 @@ class LSSTBuilder:
         optic = self._apply_M1M3_surface_perturbations(optic)
         optic = self._apply_M2_surface_perturbations(optic)
         optic = self._apply_camera_surface_perturbations(optic)
+        return optic
+
+    def build_det(self, det):
+        optic = self.build()
+        optic = self._apply_detector_perturbations(optic, det)
+        return optic
+
+    def _apply_detector_perturbations(self, optic, det):
+        det_surfs = det_height_maps(self.ccd_height_map_dir)
+        optic = optic.withPerturbedSurface(
+            "Detector",
+            det_surfs[det],
+        )
         return optic
 
     def _apply_phase(self, optic):
