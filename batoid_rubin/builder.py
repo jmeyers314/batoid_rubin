@@ -656,6 +656,7 @@ class LSSTBuilder:
         dof_coord_system=None,
         flip_m1m3_bending_modes=False,
         flip_m2_bending_modes=None,
+        dof_angle_units=None,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -697,6 +698,8 @@ class LSSTBuilder:
         flip_m2_bending_modes : bool, optional
             Whether to flip the sign of the M2 bending modes. This is needed
             to match the convention used in the Rubin AOS. Default is True.
+        dof_angle_units : {"arcsec", "degree"}, optional
+            Units for the AOS DOF angles. Default is "arcsec".
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -747,6 +750,18 @@ class LSSTBuilder:
             flip_m2_bending_modes = True
         self.flip_m1m3_bending_modes = flip_m1m3_bending_modes
         self.flip_m2_bending_modes = flip_m2_bending_modes
+
+        if dof_angle_units is None:
+            warnings.warn(
+                "Default dof_angle_units will change from arcsec to degree in a"
+                " future release. Please explicitly set dof_angle_units to avoid"
+                " this warning.",
+                FutureWarning
+            )
+            dof_angle_units = "arcsec"
+        if dof_angle_units not in ["arcsec", "degree"]:
+            raise ValueError("Invalid dof_angle_units")
+        self.dof_angle_units = dof_angle_units
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -1016,9 +1031,9 @@ class LSSTBuilder:
         dof : ndarray (50,)
             AOS degrees of freedom.
             0,1,2 are M2 z,x,y in micron
-            3,4 are M2 rot around x, y in arcsec
+            3,4 are M2 rot around x, y in self.dof_angle_units
             5,6,7 are camera z,x,y in micron
-            8,9 are camera rot around x, y in arcsec
+            8,9 are camera rot around x, y in self.dof_angle_units
             The next len(use_m1m3_modes) are M1M3 bending modes in micron
             The next len(use_m2_modes) are M2 bending modes in micron
 
@@ -1055,7 +1070,7 @@ class LSSTBuilder:
         ----------
         dof : ndarray (5,), optional
             0,1,2 are M2 z,x,y in micron
-            3,4 are M2 rot around x, y in arcsec
+            3,4 are M2 rot around x, y in self.dof_angle_units
         dx, dy, dz : float
             M2 displacement in micron
         rx, ry : galsim.Angle
@@ -1084,9 +1099,15 @@ class LSSTBuilder:
             if dy is not None:
                 ret.dof[2] = dy
             if rx is not None:
-                ret.dof[3] = rx.deg*3600
+                if self.dof_angle_units == "arcsec":
+                    ret.dof[3] = rx.deg*3600
+                else:
+                    ret.dof[3] = rx.deg
             if ry is not None:
-                ret.dof[4] = ry.deg*3600
+                if self.dof_angle_units == "arcsec":
+                    ret.dof[4] = ry.deg*3600
+                else:
+                    ret.dof[4] = ry.deg
         return ret
 
 
@@ -1113,7 +1134,7 @@ class LSSTBuilder:
         ----------
         dof : ndarray (5,), optional
             0,1,2 are camera z,x,y in micron
-            3,4 are camera rot around x, y in arcsec
+            3,4 are camera rot around x, y in self.dof_angle_units
         dx, dy, dz : float
             camera displacement in micron
         rx, ry : galsim.Angle
@@ -1142,9 +1163,15 @@ class LSSTBuilder:
             if dy is not None:
                 ret.dof[7] = dy
             if rx is not None:
-                ret.dof[8] = rx.deg*3600
+                if self.dof_angle_units == "arcsec":
+                    ret.dof[8] = rx.deg*3600
+                else:
+                    ret.dof[8] = rx.deg
             if ry is not None:
-                ret.dof[9] = ry.deg*3600
+                if self.dof_angle_units == "arcsec":
+                    ret.dof[9] = ry.deg*3600
+                else:
+                    ret.dof[9] = ry.deg
         return ret
 
     @attach_attr(
@@ -1335,9 +1362,10 @@ class LSSTBuilder:
                 np.array([dof[1], dof[2], dof[0]])*1e-6
             )
 
+        angle_factor = 1./3600 if self.dof_angle_units == "arcsec" else 1.0
         if np.any(dof[3:5]):
-            rx = batoid.RotX(np.deg2rad(dof[3]/3600))
-            ry = batoid.RotY(np.deg2rad(dof[4]/3600))
+            rx = batoid.RotX(np.deg2rad(dof[3]*angle_factor))
+            ry = batoid.RotY(np.deg2rad(dof[4]*angle_factor))
             optic = optic.withLocallyRotatedOptic(
                 "M2",
                 rx @ ry
@@ -1350,8 +1378,8 @@ class LSSTBuilder:
             )
 
         if np.any(dof[8:10]):
-            rx = batoid.RotX(np.deg2rad(dof[8]/3600))
-            ry = batoid.RotY(np.deg2rad(dof[9]/3600))
+            rx = batoid.RotX(np.deg2rad(dof[8]*angle_factor))
+            ry = batoid.RotY(np.deg2rad(dof[9]*angle_factor))
             optic = optic.withLocallyRotatedOptic(
                 self.cam_name,
                 rx @ ry
@@ -1662,11 +1690,13 @@ LSSTBuilder._single_params = {}
 LSSTBuilder._opt_params = {
     "fea_dir":str,
     "bend_dir":str,
+    "ccd_height_map_dir":str,
     "use_m1m3_modes":None,
     "use_m2_modes":None,
     "dof_coord_system":str,
     "flip_m1m3_bending_modes":bool,
     "flip_m2_bending_modes":bool,
+    "dof_angle_units":str,
 }
 # Ignore with_* args in the ImSim config dict
 LSSTBuilder._ignore_params = {

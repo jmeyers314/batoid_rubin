@@ -466,6 +466,44 @@ def test_mirror_flip():
     np.testing.assert_equal(trays1.failed, trays8.failed)
 
 
+def test_angle_units():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+    rng = np.random.default_rng(5772156649)
+    builder1 = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_angle_units="arcsec",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+    builder2 = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_angle_units="degree",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+    dof1 = np.array([0, 0, 0, 10, 13, 0, 0, 0, -20, 10])
+    dof2 = np.array([0, 0, 0, 10/3600, 13/3600, 0, 0, 0, -20/3600, 10/3600])
+    builder1 = builder1.with_aos_dof(dof1)
+    builder2 = builder2.with_aos_dof(dof2)
+    scope1 = builder1.build()
+    scope2 = builder2.build()
+
+    trays1 = scope1.trace(rays.copy())
+    trays2 = scope2.trace(rays.copy())
+    np.testing.assert_allclose(trays1.r, trays2.r, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(trays1.v, trays2.v, rtol=0, atol=1e-12)
+    np.testing.assert_equal(trays1.vignetted, trays2.vignetted)
+    np.testing.assert_equal(trays1.failed, trays2.failed)
+
+
 if __name__ == "__main__":
     test_builder()
     test_attr()
@@ -474,3 +512,4 @@ if __name__ == "__main__":
     test_subsys_dof()
     test_coord_sys()
     test_mirror_flip()
+    test_angle_units()
