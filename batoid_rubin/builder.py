@@ -719,6 +719,8 @@ class LSSTBuilder:
             raise ValueError("Unsupported optic")
 
         # "Input" variables.
+        self.rtp = None
+
         self.m1m3_zenith = None
         self.m1m3_TBulk = 0.0
         self.m1m3_TxGrad = 0.0
@@ -747,6 +749,11 @@ class LSSTBuilder:
         if self._ccd_height_map_dir is None:
             self._ccd_height_map_dir = ensure_data_dir(self._ccd_height_map_dir_raw)
         return self._ccd_height_map_dir
+
+    def with_rtp(self, rtp):
+        ret = copy(self)
+        ret.rtp = rtp
+        return ret
 
     @attach_attr(
         _req_params={"zenith":galsim.Angle}
@@ -1212,6 +1219,7 @@ class LSSTBuilder:
             The perturbed optic.
         """
         optic = self.fiducial
+        optic = self._apply_rtp(optic)
         optic = self._apply_phase(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_M1M3_surface_perturbations(optic)
@@ -1242,6 +1250,12 @@ class LSSTBuilder:
             "Detector",
             det_surfs[det],
         )
+        return optic
+
+    def _apply_rtp(self, optic):
+        if self.rtp is None:
+            return optic
+        optic = optic.withLocallyRotatedOptic(self.cam_name, batoid.RotZ(self.rtp))
         return optic
 
     def _apply_phase(self, optic):
