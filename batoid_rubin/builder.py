@@ -805,6 +805,18 @@ class LSSTBuilder:
         return self._ccd_height_map_dir
 
     def with_rtp(self, rtp):
+        """Return new LSSTBuilder that includes a given camera rotation by RTP.
+
+        Parameters
+        ----------
+        rtp : float
+            Camera rotation in radians.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with camera rotation applied.
+        """
         ret = copy(self)
         ret.rtp = rtp
         return ret
@@ -813,7 +825,7 @@ class LSSTBuilder:
         _req_params={"zenith":galsim.Angle}
     )
     def with_m1m3_gravity(self, zenith):
-        """Return new SSTBuilder that includes gravitational flexure of M1M3.
+        """Return new LSSTBuilder that includes gravitational flexure of M1M3.
 
         Parameters
         ----------
@@ -822,7 +834,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with M1M3 gravitation flexure applied.
         """
         if isinstance(zenith, Real):
@@ -851,7 +863,7 @@ class LSSTBuilder:
         m1m3_TzGrad=0.0,
         m1m3_TrGrad=0.0,
     ):
-        """Return new SSTBuilder that includes temperature flexure of M1M3.
+        """Return new LSSTBuilder that includes temperature flexure of M1M3.
 
         Parameters
         ----------
@@ -868,7 +880,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with M1M3 temperature flexure applied.
         """
         ret = copy(self)
@@ -889,7 +901,7 @@ class LSSTBuilder:
         }
     )
     def with_m1m3_lut(self, zenith, error=0.0, seed=1):
-        """Return new SSTBuilder that includes LUT perturbations of M1M3.
+        """Return new LSSTBuilder that includes LUT perturbations of M1M3.
 
         Parameters
         ----------
@@ -900,7 +912,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with M1M3 LUT applied.
         """
         if isinstance(zenith, Real):
@@ -916,7 +928,7 @@ class LSSTBuilder:
         _req_params={"zenith":galsim.Angle},
     )
     def with_m2_gravity(self, zenith):
-        """Return new SSTBuilder that includes gravitational flexure of M2.
+        """Return new LSSTBuilder that includes gravitational flexure of M2.
 
         Parameters
         ----------
@@ -925,7 +937,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with M2 gravitation flexure applied.
         """
         if isinstance(zenith, Real):
@@ -946,7 +958,7 @@ class LSSTBuilder:
         m2_TzGrad=0.0,
         m2_TrGrad=0.0,
     ):
-        """Return new SSTBuilder that includes temperature flexure of M2.
+        """Return new LSSTBuilder that includes temperature flexure of M2.
 
         Parameters
         ----------
@@ -957,7 +969,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with M2 temperature flexure applied.
         """
         ret = copy(self)
@@ -972,7 +984,7 @@ class LSSTBuilder:
         },
     )
     def with_camera_gravity(self, zenith, rotation):
-        """Return new SSTBuilder that includes gravitational flexure of camera.
+        """Return new LSSTBuilder that includes gravitational flexure of camera.
 
         Parameters
         ----------
@@ -983,7 +995,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with camera gravitation flexure applied.
         """
         if isinstance(zenith, Real):
@@ -1002,7 +1014,7 @@ class LSSTBuilder:
         },
     )
     def with_camera_temperature(self, camera_TBulk):
-        """Return new SSTBuilder that includes temperature flexure of camera.
+        """Return new LSSTBuilder that includes temperature flexure of camera.
 
         Parameters
         ----------
@@ -1011,7 +1023,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with camera temperature flexure applied.
         """
         ret = copy(self)
@@ -1024,7 +1036,7 @@ class LSSTBuilder:
         },
     )
     def with_aos_dof(self, dof):
-        """Return new SSTBuilder that includes specified AOS degrees of freedom
+        """Return new LSSTBuilder that includes specified AOS degrees of freedom
 
         Parameters
         ----------
@@ -1039,7 +1051,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified AOS DOF.
         """
         assert len(dof) == 10+len(self.use_m1m3_modes)+len(self.use_m2_modes)
@@ -1060,7 +1072,7 @@ class LSSTBuilder:
     def with_m2_rigid(
         self, dof=None, dx=None, dy=None, dz=None, rx=None, ry=None
     ):
-        """Return new SSTBuilder that includes specified M2 rigid body DOF
+        """Return new LSSTBuilder that includes specified M2 rigid body DOF
 
         Note that you cannot specify both dof and dx,dy,dz,rx,ry.
         Values specified here overwrite M2 rigid body values specified in
@@ -1078,7 +1090,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified M2 rigid body DOF.
         """
         ret = copy(self)
@@ -1124,7 +1136,7 @@ class LSSTBuilder:
     def with_camera_rigid(
         self, dof=None, dx=None, dy=None, dz=None, rx=None, ry=None
     ):
-        """Return new SSTBuilder that includes specified camera rigid body DOF
+        """Return new LSSTBuilder that includes specified camera rigid body DOF
 
         Note that you cannot specify both dof and dx,dy,dz,rx,ry.
         Values specified here overwrite camera rigid body values specified in
@@ -1142,7 +1154,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified camera rigid body DOF.
         """
         ret = copy(self)
@@ -1180,7 +1192,7 @@ class LSSTBuilder:
         },
     )
     def with_m1m3_bend(self, dof):
-        """Return new SSTBuilder that includes specified M1M3 bending modes
+        """Return new LSSTBuilder that includes specified M1M3 bending modes
 
         Parameters
         ----------
@@ -1189,7 +1201,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified M1M3 bending modes.
         """
         ret = copy(self)
@@ -1204,7 +1216,7 @@ class LSSTBuilder:
         },
     )
     def with_m2_bend(self, dof):
-        """Return new SSTBuilder that includes specified M2 bending modes
+        """Return new LSSTBuilder that includes specified M2 bending modes
 
         Parameters
         ----------
@@ -1213,7 +1225,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified M2 bending modes.
         """
         ret = copy(self)
@@ -1229,7 +1241,7 @@ class LSSTBuilder:
         },
     )
     def with_extra_zk(self, zk, eps):
-        """Return new SSTBuilder that includes specified constant Zernike phase
+        """Return new LSSTBuilder that includes specified constant Zernike phase
         screen at entrance pupil.
 
         Parameters
@@ -1241,7 +1253,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified extra Zernike phases.
         """
         ret = copy(self)
@@ -1255,7 +1267,7 @@ class LSSTBuilder:
         },
     )
     def with_m1m3_extra_forces(self, forces):
-        """Return new SSTBuilder that includes specified M1M3 extra forces
+        """Return new LSSTBuilder that includes specified M1M3 extra forces
 
         Parameters
         ----------
@@ -1264,7 +1276,7 @@ class LSSTBuilder:
 
         Returns
         -------
-        ret : SSTBuilder
+        ret : LSSTBuilder
             New builder with specified M1M3 extra forces.
 
         Notes
