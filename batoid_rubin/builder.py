@@ -1210,6 +1210,7 @@ class LSSTBuilder:
         ret.m1m3_extra_forces = forces
         return ret
 
+    @lru_cache(maxsize=1)
     def build(self):
         """Build the optic.
 
@@ -1227,6 +1228,7 @@ class LSSTBuilder:
         optic = self._apply_camera_surface_perturbations(optic)
         return optic
 
+    @lru_cache(maxsize=5)  # Keep modest
     def build_det(self, det):
         """Build the optic for a specific detector.
 
