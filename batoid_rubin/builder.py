@@ -657,6 +657,7 @@ class LSSTBuilder:
         flip_m1m3_bending_modes=False,
         flip_m2_bending_modes=None,
         dof_angle_units=None,
+        inex_optic=None,
     ):
         """Create a Simony Survey Telescope with LSSTCam camera builder.
 
@@ -700,6 +701,8 @@ class LSSTBuilder:
             to match the convention used in the Rubin AOS. Default is True.
         dof_angle_units : {"arcsec", "degree"}, optional
             Units for the AOS DOF angles. Default is "arcsec".
+        inex_optic : batoid.Optic, optional
+            Default optic to perturb for going intra/extra focal.  Default is None.
         """
         # Number of FEA nodes and actuators is inferred from content of fea_dir.
         # Number of bending modes is inferred from content of bend_dir.
@@ -762,6 +765,8 @@ class LSSTBuilder:
         if dof_angle_units not in ["arcsec", "degree"]:
             raise ValueError("Invalid dof_angle_units")
         self.dof_angle_units = dof_angle_units
+        self.inex_optic = inex_optic
+        self.inex_offset = 0.0
 
         if 'LSST.LSSTCamera' in self.fiducial.itemDict:
             self.cam_name = 'LSSTCamera'
@@ -803,6 +808,59 @@ class LSSTBuilder:
         if self._ccd_height_map_dir is None:
             self._ccd_height_map_dir = ensure_data_dir(self._ccd_height_map_dir_raw)
         return self._ccd_height_map_dir
+
+    def with_intra(self, inex_optic=None, offset=1.5e-3):
+        """Return new LSSTBuilder that is intra-focal by given offset.
+
+        Parameters
+        ----------
+        inex_optic : batoid.Optic, optional
+            Optic to perturb for going intra/extra focal.  Default is self.inex_optic.
+        offset : float
+            Intra-focal offset in meters.  Default is +1.5 mm.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with intra-focal offset applied.
+        """
+        if inex_optic is None:
+            inex_optic = self.inex_optic
+        if inex_optic is None:
+            raise ValueError(
+                "inex_optic must be provided either as an argument or as an attribute."
+            )
+        ret = copy(self)
+        ret.inex_optic = inex_optic
+        ret.inex_offset = -offset
+        return ret
+
+    def with_extra(self, inex_optic=None, offset=1.5e-3):
+        """Return new LSSTBuilder that is extra-focal by given offset.
+
+        Parameters
+        ----------
+        inex_optic : batoid.Optic, optional
+            Optic to perturb for going intra/extra focal.  Default is self.inex_optic.
+        offset : float
+            Extra-focal offset in meters.  Default is 1.5 mm.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with extra-focal offset applied.
+        """
+        if inex_optic is None:
+            inex_optic = self.inex_optic
+        if inex_optic is None:
+            raise ValueError(
+                "inex_optic must be provided either as an argument or as an attribute."
+            )
+        ret = copy(self)
+        ret.inex_optic = inex_optic
+        ret.inex_offset = offset
+        return ret
+
 
     def with_rtp(self, rtp):
         """Return new LSSTBuilder that includes a given camera rotation by RTP.
@@ -1298,6 +1356,7 @@ class LSSTBuilder:
             The perturbed optic.
         """
         optic = self.fiducial
+        optic = self._apply_inex(optic)
         optic = self._apply_rtp(optic)
         optic = self._apply_phase(optic)
         optic = self._apply_rigid_body_perturbations(optic)
@@ -1322,6 +1381,15 @@ class LSSTBuilder:
         """
         optic = self.build()
         optic = self._apply_detector_perturbations(optic, det)
+        return optic
+
+    def _apply_inex(self, optic):
+        if self.inex_optic is None or self.inex_offset == 0.0:
+            return optic
+        optic = optic.withGloballyShiftedOptic(
+            self.inex_optic,
+            [0.0, 0.0, self.inex_offset]
+        )
         return optic
 
     def _apply_detector_perturbations(self, optic, det):
