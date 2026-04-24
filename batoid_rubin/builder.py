@@ -752,6 +752,9 @@ class LSSTBuilder:
         # "Input" variables.
         self.rtp = None
 
+        self.camera_piston = 0.0
+        self.detector_piston = 0.0
+
         self.m1m3_zenith = None
         self.m1m3_TBulk = 0.0
         self.m1m3_TxGrad = 0.0
@@ -796,6 +799,40 @@ class LSSTBuilder:
         """
         ret = copy(self)
         ret.rtp = rtp
+        return ret
+
+    def with_camera_piston(self, piston):
+        """Return new LSSTBuilder that includes a given camera piston.
+
+        Parameters
+        ----------
+        piston : float
+            Camera piston in microns.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with camera piston applied.
+        """
+        ret = copy(self)
+        ret.camera_piston = piston
+        return ret
+
+    def with_detector_piston(self, piston):
+        """Return new LSSTBuilder that includes a given detector piston.
+
+        Parameters
+        ----------
+        piston : float
+            Detector piston in microns.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with detector piston applied.
+        """
+        ret = copy(self)
+        ret.detector_piston = piston
         return ret
 
     @attach_attr(
@@ -1335,6 +1372,25 @@ class LSSTBuilder:
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
+        if self.camera_piston != 0.0:
+            if self.dof_coord_system == "ZCS":
+                shift = -self.camera_piston
+            else:
+                shift = self.camera_piston
+            optic = optic.withGloballyShiftedOptic(
+                self.cam_name,
+                [0.0, 0.0, shift * 1e-6]
+            )
+        if self.detector_piston != 0.0:
+            if self.dof_coord_system == "ZCS":
+                shift = -self.detector_piston
+            else:
+                shift = self.detector_piston
+            optic = optic.withGloballyShiftedOptic(
+                "Detector",
+                [0.0, 0.0, shift * 1e-6]
+            )
+
         dof = self.dof.copy()
         if self.dof_coord_system == "ZCS":
             # Flip x, z and rotations about x, z.
