@@ -381,10 +381,9 @@ def transform_zernike(zernike, R_outer, R_inner):
     return ret
 
 
-def _load_mirror_bend(bend_dir, inds, config):
-    """Load bending modes for a single mirror.
-
-    Bending modes are parameterized by a sum of a Zernike polynomial and a grid.
+@lru_cache(maxsize=4)
+def load_bend(bend_dir, inds, mirror):
+    """Load bending modes for all mirrors.
 
     Parameters
     ----------
@@ -392,14 +391,16 @@ def _load_mirror_bend(bend_dir, inds, config):
         Directory containing the bending mode files.
     inds : list of int
         List indicating the ordering of the bending modes to use.
-    config : dict
-        Configuration dictionary for this mirror.
+    mirror : {"M1", "M2", "M3"}
+        Name of the mirror.
 
     Returns
     -------
     modes : BendingMode
-        Bending modes for this mirror.
+        Bending modes for the specified mirror.
     """
+    with open(Path(bend_dir) / "bend.yaml") as f:
+        config = yaml.safe_load(f)[mirror]
     zk = fits.getdata(Path(bend_dir) / config['zk']['file'])
     grid = fits.getdata(Path(bend_dir) / config['grid']['file'])
     coords = fits.getdata(Path(bend_dir) / config['grid']['coords'])
@@ -414,30 +415,6 @@ def _load_mirror_bend(bend_dir, inds, config):
         coords[0], coords[1],
         grid[0], grid[1], grid[2], grid[3]
     )
-
-
-@lru_cache(maxsize=4)
-def load_bend(bend_dir, inds):
-    """Load bending modes for all mirrors.
-
-    Parameters
-    ----------
-    bend_dir : str
-        Directory containing the bending mode files.
-    inds : list of int
-        List indicating the ordering of the bending modes to use.
-
-    Returns
-    -------
-    modes : dict
-        Dictionary of bending modes for each mirror.
-    """
-    with open(Path(bend_dir) / "bend.yaml") as f:
-        config = yaml.safe_load(f)
-    m1 = _load_mirror_bend(bend_dir, inds, config['M1'])
-    m2 = _load_mirror_bend(bend_dir, inds, config['M2'])
-    m3 = _load_mirror_bend(bend_dir, inds, config['M3'])
-    return dict(M1=m1, M2=m2, M3=m3)
 
 
 @lru_cache(maxsize=16*3)
@@ -462,7 +439,7 @@ def realize_bend(bend_dir, dof, inds, mirror):
     modes : RealizedBend
         Realized bending modes for this mirror.
     """
-    modes = load_bend(bend_dir, inds)[mirror]
+    modes = load_bend(bend_dir, inds, mirror)
     dof = np.array(dof)
     zk = galsim.zernike.Zernike(
         np.tensordot(dof, modes.zk, axes=1),
