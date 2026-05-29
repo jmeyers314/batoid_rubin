@@ -716,6 +716,7 @@ class LSSTBuilder:
         if dof_coord_system not in ["ZCS", "OCS"]:
             raise ValueError("Invalid dof_coord_system")
         self.dof_coord_system = dof_coord_system
+        self.cs_sign = -1 if dof_coord_system == "ZCS" else 1
 
         if flip_m2_bending_modes is None:
             warnings.warn(
@@ -1372,34 +1373,21 @@ class LSSTBuilder:
         return optic
 
     def _apply_rigid_body_perturbations(self, optic):
+        # Apply cs_sign to convert ZCS (-1) or OCS (+1) inputs to internal convention.
         if self.camera_piston != 0.0:
-            if self.dof_coord_system == "ZCS":
-                shift = -self.camera_piston
-            else:
-                shift = self.camera_piston
             optic = optic.withGloballyShiftedOptic(
                 self.cam_name,
-                [0.0, 0.0, shift * 1e-6]
+                [0.0, 0.0, self.cs_sign * self.camera_piston * 1e-6]
             )
         if self.detector_piston != 0.0:
-            if self.dof_coord_system == "ZCS":
-                shift = -self.detector_piston
-            else:
-                shift = self.detector_piston
             optic = optic.withGloballyShiftedOptic(
                 "Detector",
-                [0.0, 0.0, shift * 1e-6]
+                [0.0, 0.0, self.cs_sign * self.detector_piston * 1e-6]
             )
 
         dof = self.dof.copy()
-        if self.dof_coord_system == "ZCS":
-            # Flip x, z and rotations about x, z.
-            dof[0] = -dof[0]
-            dof[1] = -dof[1]
-            dof[3] = -dof[3]
-            dof[5] = -dof[5]
-            dof[6] = -dof[6]
-            dof[8] = -dof[8]
+        # Apply cs_sign to convert ZCS (-1) or OCS (+1) inputs to internal convention.
+        dof[[0, 1, 3, 5, 6, 8]] *= self.cs_sign
 
         if np.any(dof[0:3]):
             optic = optic.withGloballyShiftedOptic(
