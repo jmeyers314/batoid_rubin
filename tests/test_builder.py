@@ -504,6 +504,124 @@ def test_angle_units():
     np.testing.assert_equal(trays1.failed, trays2.failed)
 
 
+def test_camera_piston():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+    piston = 0.5  # microns
+
+    builder_zcs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+    builder_ocs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+
+    # camera_piston should be equivalent to cam_dz DOF (dof[5])
+    dof = np.zeros(10)
+    dof[5] = piston
+    for builder in (builder_zcs, builder_ocs):
+        scope_piston = builder.with_camera_piston(piston).build()
+        scope_dof = builder.with_aos_dof(dof).build()
+        trays_piston = scope_piston.trace(rays.copy())
+        trays_dof = scope_dof.trace(rays.copy())
+        np.testing.assert_equal(trays_piston.r, trays_dof.r)
+        np.testing.assert_equal(trays_piston.v, trays_dof.v)
+        np.testing.assert_equal(trays_piston.vignetted, trays_dof.vignetted)
+        np.testing.assert_equal(trays_piston.failed, trays_dof.failed)
+
+    # ZCS piston=p should equal OCS piston=-p (sign convention)
+    scope_zcs = builder_zcs.with_camera_piston(piston).build()
+    scope_ocs = builder_ocs.with_camera_piston(-piston).build()
+    trays_zcs = scope_zcs.trace(rays.copy())
+    trays_ocs = scope_ocs.trace(rays.copy())
+    np.testing.assert_equal(trays_zcs.r, trays_ocs.r)
+    np.testing.assert_equal(trays_zcs.v, trays_ocs.v)
+    np.testing.assert_equal(trays_zcs.vignetted, trays_ocs.vignetted)
+    np.testing.assert_equal(trays_zcs.failed, trays_ocs.failed)
+
+    # Non-zero piston should change the telescope (compare in global coords)
+    scope_base = builder_zcs.build()
+    trays_base = scope_base.trace(rays.copy())
+    global_cs = batoid.CoordSys()
+    assert not np.allclose(
+        trays_zcs.toCoordSys(global_cs).z,
+        trays_base.toCoordSys(global_cs).z,
+        atol=piston * 1e-6 * 0.99, rtol=0
+    )
+
+
+def test_detector_piston():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+    piston = 0.5  # microns
+
+    builder_zcs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+    builder_ocs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+
+    # ZCS piston=p should equal OCS piston=-p (sign convention)
+    scope_zcs = builder_zcs.with_detector_piston(piston).build()
+    scope_ocs = builder_ocs.with_detector_piston(-piston).build()
+    trays_zcs = scope_zcs.trace(rays.copy())
+    trays_ocs = scope_ocs.trace(rays.copy())
+    np.testing.assert_equal(trays_zcs.r, trays_ocs.r)
+    np.testing.assert_equal(trays_zcs.v, trays_ocs.v)
+    np.testing.assert_equal(trays_zcs.vignetted, trays_ocs.vignetted)
+    np.testing.assert_equal(trays_zcs.failed, trays_ocs.failed)
+
+    # In ZCS, detector_piston=p shifts the detector by -p*1e-6 in z.
+    # Convert to global coords to observe this shift.
+    scope_base = builder_zcs.build()
+    trays_base = scope_base.trace(rays.copy())
+    global_cs = batoid.CoordSys()
+    np.testing.assert_allclose(
+        trays_zcs.toCoordSys(global_cs).z - trays_base.toCoordSys(global_cs).z,
+        -piston * 1e-6,
+        rtol=0, atol=1e-15,
+    )
+
+    # detector_piston should be independent of camera_piston (compare global z)
+    scope_cam = builder_zcs.with_camera_piston(piston).build()
+    scope_both = builder_zcs.with_camera_piston(piston).with_detector_piston(piston).build()
+    trays_cam = scope_cam.trace(rays.copy())
+    trays_both = scope_both.trace(rays.copy())
+    global_cs = batoid.CoordSys()
+    assert not np.allclose(
+        trays_cam.toCoordSys(global_cs).z,
+        trays_both.toCoordSys(global_cs).z,
+        atol=piston * 1e-6 * 0.99, rtol=0
+    )
+
+
 if __name__ == "__main__":
     test_builder()
     test_attr()
@@ -513,3 +631,5 @@ if __name__ == "__main__":
     test_coord_sys()
     test_mirror_flip()
     test_angle_units()
+    test_camera_piston()
+    test_detector_piston()
