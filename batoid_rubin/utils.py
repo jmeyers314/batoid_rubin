@@ -30,7 +30,10 @@ def resolve_data_dir(directory):
 def ensure_data_dir(directory):
     """Resolve data directory, downloading from Zenodo if necessary."""
     resolved = resolve_data_dir(directory)
-    if resolved.is_dir():
+    # An empty directory means a previous download was interrupted; treat it as
+    # missing so it gets (re)downloaded instead of failing later on a missing
+    # file.
+    if resolved.is_dir() and any(resolved.iterdir()):
         return resolved
     if resolved.name not in zenodo_dois:
         raise ValueError(f"Cannot infer directory: {directory}")
