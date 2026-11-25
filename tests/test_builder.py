@@ -563,6 +563,65 @@ def test_camera_piston():
     )
 
 
+def test_m2_piston():
+    fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
+    rays = batoid.RayVector.asPolar(
+        optic=fiducial,
+        wavelength=622e-9,
+        theta_x=0.01,
+        theta_y=0.01,
+        nrad=10,
+        naz=60,
+    )
+    piston = 100.  # microns
+
+    builder_zcs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="ZCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+    builder_ocs = batoid_rubin.builder.LSSTBuilder(
+        fiducial,
+        dof_coord_system="OCS",
+        use_m1m3_modes=[],
+        use_m2_modes=[],
+    )
+
+    # m2_piston should be equivalent to m2_dz DOF (dof[0])
+    dof = np.zeros(10)
+    dof[0] = piston
+    for builder in (builder_zcs, builder_ocs):
+        scope_piston = builder.with_m2_piston(piston).build()
+        scope_dof = builder.with_aos_dof(dof).build()
+        trays_piston = scope_piston.trace(rays.copy())
+        trays_dof = scope_dof.trace(rays.copy())
+        np.testing.assert_equal(trays_piston.r, trays_dof.r)
+        np.testing.assert_equal(trays_piston.v, trays_dof.v)
+        np.testing.assert_equal(trays_piston.vignetted, trays_dof.vignetted)
+        np.testing.assert_equal(trays_piston.failed, trays_dof.failed)
+
+    # ZCS piston=p should equal OCS piston=-p (sign convention)
+    scope_zcs = builder_zcs.with_m2_piston(piston).build()
+    scope_ocs = builder_ocs.with_m2_piston(-piston).build()
+    trays_zcs = scope_zcs.trace(rays.copy())
+    trays_ocs = scope_ocs.trace(rays.copy())
+    np.testing.assert_equal(trays_zcs.r, trays_ocs.r)
+    np.testing.assert_equal(trays_zcs.v, trays_ocs.v)
+    np.testing.assert_equal(trays_zcs.vignetted, trays_ocs.vignetted)
+    np.testing.assert_equal(trays_zcs.failed, trays_ocs.failed)
+
+    # Make sure the rays end up in different positions.
+    scope_base = builder_zcs.build()
+    trays_base = scope_base.trace(rays.copy())
+    global_cs = batoid.CoordSys()
+    assert not np.allclose(
+        trays_zcs.toCoordSys(global_cs).x,
+        trays_base.toCoordSys(global_cs).x,
+        atol=1e-6, rtol=0
+    )
+
+
 def test_detector_piston():
     fiducial = batoid.Optic.fromYaml("LSST_r.yaml")
     rays = batoid.RayVector.asPolar(

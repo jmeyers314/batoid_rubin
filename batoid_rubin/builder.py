@@ -755,6 +755,7 @@ class LSSTBuilder:
 
         self.camera_piston = 0.0
         self.detector_piston = 0.0
+        self.m2_piston = 0.0
 
         self.m1m3_zenith = None
         self.m1m3_TBulk = 0.0
@@ -834,6 +835,23 @@ class LSSTBuilder:
         """
         ret = copy(self)
         ret.detector_piston = piston
+        return ret
+
+    def with_m2_piston(self, piston):
+        """Return new LSSTBuilder that includes a given M2 piston.
+
+        Parameters
+        ----------
+        piston : float
+            M2 piston in microns.
+
+        Returns
+        -------
+        ret : LSSTBuilder
+            New builder with M2 piston applied.
+        """
+        ret = copy(self)
+        ret.m2_piston = piston
         return ret
 
     @attach_attr(
@@ -1383,6 +1401,11 @@ class LSSTBuilder:
             optic = optic.withGloballyShiftedOptic(
                 "Detector",
                 [0.0, 0.0, self.cs_sign * self.detector_piston * 1e-6]
+            )
+        if self.m2_piston != 0.0:
+            optic = optic.withGloballyShiftedOptic(
+                "M2",
+                [0.0, 0.0, self.cs_sign * self.m2_piston * 1e-6]
             )
 
         dof = self.dof.copy()
